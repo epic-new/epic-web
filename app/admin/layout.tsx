@@ -1,5 +1,4 @@
 import { getUser } from "@/lib/auth";
-import { Toaster } from "@/components/ui/sonner";
 import { AdminAccessDenied } from "./components/admin-access-denied";
 
 export default async function AdminLayout({
@@ -17,7 +16,6 @@ export default async function AdminLayout({
       ) : (
         <AdminAccessDenied />
       )}
-      <Toaster />
     </div>
   );
 }

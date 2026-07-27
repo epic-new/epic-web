@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,6 +31,15 @@ export default function RootLayout({
       >
         <Providers>
           {children}
+          {/* Mounted at the root so every route group can raise a toast. It
+              used to live only in `app/admin/layout.tsx`, which meant a
+              `toast()` anywhere else — the whole `(app)` group — rendered
+              nothing: the call succeeded, the action behind it succeeded, and
+              the user saw silence. A spec written against that feedback fails
+              for a reason that has nothing to do with the feature under test.
+              One Toaster, at the root, is also what the styleguide page has
+              always told readers this template does. */}
+          <Toaster />
         </Providers>
       </body>
     </html>
