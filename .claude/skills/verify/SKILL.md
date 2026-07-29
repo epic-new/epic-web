@@ -33,7 +33,13 @@ There is no separate verify server to boot: the preview is already running (supe
 
 **If the prompt contains a "Test credentials" block, use it directly and skip this section entirely** — the harness already read the seeded users; do not `cat` seed files or run `db:seed`.
 
-Fallback (no block in the prompt): the credentials live in `db/seed/user.seed.ts`, exported as the `userSeeds` array (`email`, `password`, `name`, `userId`; passwords are generated per environment — never assume a default). Read them with `cat db/seed/user.seed.ts`. If `userSeeds` is empty or the file is missing, run `bun run db:seed` (safe to re-run; reconciles in place) with the same `DATABASE_URL` the preview uses (the one in `.env`), then re-read. `bun run db:reset` only when the schema is stale — it drops all data.
+Fallback (no block in the prompt): the values live in `db/seed/.credentials/user-seeds.<db>.json`, written by `bun run db:seed` and keyed by the database the preview targets. `db/seed/user.seed.ts` exports them as the `userSeeds` array (`email`, `password`, `name`, `userId`; passwords are generated per environment — never assume a default), but it is only a loader — `cat`-ing it shows the loading code, not the credentials. Read the JSON file directly:
+
+```bash
+cat db/seed/.credentials/user-seeds.*.json
+```
+
+If no such file exists, run `bun run db:seed` (safe to re-run; reconciles in place) with the same `DATABASE_URL` the preview uses (the one in `.env`), then re-read. `bun run db:reset` only when the schema is stale — it drops all data.
 
 - Assign one distinct user per scenario, round-robin by scenario order (`userSeeds[(N - 1) % userSeeds.length]`). One user per scenario keeps data created by one scenario from bleeding into the next. With 5 seeded users, the first five scenarios each get a unique user.
 - **One browser session at a time.** Each `--session <name>` is a FULL Chrome instance, and the sandbox has a hard memory cgroup shared with two dev servers — parallel sessions get the OOM killer shooting Chrome and the servers mid-scenario (symptoms: pages stuck on "Loading...", "Under Construction" for routes that exist, sign-ins that never land). Run scenarios sequentially in one session, and when the next scenario needs a different user, `npx agent-browser --session <name> close` the previous session (or just sign out) BEFORE opening the next. Never keep more than one session alive.
