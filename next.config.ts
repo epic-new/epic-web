@@ -6,7 +6,18 @@ const nextConfig: NextConfig = {
   // instances in the same project don't collide on `.next`.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   devIndicators: false,
-  allowedDevOrigins: ["*.http.cloud.morph.so", "*.epic.new", "*.lvh.me"],
+  // A wildcard label matches ONE label, so "*.epic.new" does not cover
+  // "8080-<sandbox>.proxy.epic.new" — the preview host is a level deeper.
+  // Without the deeper pattern Next blocks its own dev resources as
+  // cross-origin, React never hydrates, and the page renders perfectly while
+  // every form on it is inert: a click submits nothing, and the verify agent
+  // reports it as failing scenarios rather than as a broken environment.
+  allowedDevOrigins: [
+    "*.proxy.epic.new",
+    "*.http.cloud.morph.so",
+    "*.epic.new",
+    "*.lvh.me",
+  ],
   // Pin the Turbopack root to this checkout. Git worktrees live inside the
   // repo (.worktrees/*), so lockfile inference would otherwise resolve the
   // workspace root to the parent checkout and share its .next/dev/lock,

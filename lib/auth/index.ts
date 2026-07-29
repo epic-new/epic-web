@@ -55,6 +55,13 @@ export const auth = betterAuth({
     additionalFields: {},
   },
   trustedOrigins: [
+    // This app's own origin, verbatim. The wildcard below is derived from the
+    // PARENT domain (the last two labels), and one `*` matches one label — so
+    // for a preview served at `https://8080-<sandbox>.proxy.epic.new` the
+    // pattern `https://*.epic.new` does not match, and Better Auth answers
+    // 403 to its own sign-in form. Listing baseUrl removes the guesswork:
+    // whatever host this app believes it is served from is trusted.
+    baseUrl,
     ...(parentDomain
       ? [`https://${parentDomain}`, `https://*.${parentDomain}`]
       : []),
