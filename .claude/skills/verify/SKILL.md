@@ -31,9 +31,12 @@ There is no separate verify server to boot: the preview is already running (supe
    - Drive the UI per the scenario's `Act:` steps. Use `snapshot` to see the page; use the `@e…` refs it prints to `click`, `fill`, `type`, etc.
    - Confirm the scenario's `Check:` assertions match what's actually on screen / in network responses. If the scenario has a `#### PostDB` block, confirm the equivalent outcome **through the UI or network** — do not query the database to assert it.
    - Record: PASS or FAIL, with a one-line reason, and note the recording's file name for the JSON block.
+   - **Stop this scenario's recording** as soon as its `Check:` assertions are decided, before moving to the next scenario:
+     `npx agent-browser record stop`
+     Do this per scenario, not once at the end. Files are only flushed on stop, and a recording left running keeps filming through the next scenario's sign-in — wasted bytes, and credentials on a video meant to prove a different scenario.
    - **Keep each recording short.** A scenario's video should cover its `Act:` and `Check:` steps and nothing else — aim for under 60 seconds. If a scenario is still running well past that, stop recording (`npx agent-browser record stop`), finish verifying it without video, and omit `video` for that scenario. A missing recording is fine; a huge one is not.
 
-6. After the last scenario, stop recording: `npx agent-browser record stop`. Recordings are only flushed to disk on stop — skipping it leaves the last scenario's file truncated or absent.
+6. After the last scenario, run `npx agent-browser record stop` once more. It is a no-op if you already stopped that scenario's recording, and it is the safety net that keeps the last file from being left unflushed.
 
 ## Test Users
 
