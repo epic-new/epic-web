@@ -25,9 +25,15 @@ There is no separate verify server to boot: the preview is already running (supe
    - **Assign a distinct test user to the scenario** (see [Test Users](#test-users)). For the Nth scenario, use `userSeeds[(N - 1) % userSeeds.length]`. Using a different user per scenario keeps the scenarios isolated so data created by one doesn't bleed into the next.
    - **If the scenario requires an authenticated user, sign in as that assigned test user first** (via the app's signin page) before driving its steps. Skip this only when the scenario is itself an unauthenticated flow (e.g. signin/signup, public landing pages), in which case use the credentials directly as the scenario dictates.
    - If the scenario has `#### PreDB`, **set the database into that state before driving the Steps** (see [Setting up scenario state](#setting-up-scenario-state)). This is setup only: insert the rows the block names; you do not read the database back afterward.
+   - **Start this scenario's recording**, once the user is signed in and any `PreDB` state is set, and immediately before the first `Act:` step:
+     `npx agent-browser record restart $EPIC_MEDIA_DIR/scenario-<N>.webm`
+     `<N>` is the scenario's 1-based position, so scenario 3 always writes `scenario-3.webm`. Call this exactly **once per scenario** — never mid-scenario, and never twice with the same file name. Recording it after setup keeps sign-in and seed data out of the video.
    - Drive the UI per the scenario's `Act:` steps. Use `snapshot` to see the page; use the `@e…` refs it prints to `click`, `fill`, `type`, etc.
    - Confirm the scenario's `Check:` assertions match what's actually on screen / in network responses. If the scenario has a `#### PostDB` block, confirm the equivalent outcome **through the UI or network** — do not query the database to assert it.
-   - Record: PASS or FAIL, with a one-line reason.
+   - Record: PASS or FAIL, with a one-line reason, and note the recording's file name for the JSON block.
+   - **Keep each recording short.** A scenario's video should cover its `Act:` and `Check:` steps and nothing else — aim for under 60 seconds. If a scenario is still running well past that, stop recording (`npx agent-browser record stop`), finish verifying it without video, and omit `video` for that scenario. A missing recording is fine; a huge one is not.
+
+6. After the last scenario, stop recording: `npx agent-browser record stop`. Recordings are only flushed to disk on stop — skipping it leaves the last scenario's file truncated or absent.
 
 ## Test Users
 
