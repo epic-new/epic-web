@@ -144,8 +144,10 @@ Service scenarios cover:
 
 ## Action and Route Tests
 
-Controller tests call the real Action or Route through its real Service and Models.
-Replace authentication/session lookup so the test controls the actor.
+Controller tests call the real Action or Route through its real Service and
+Models. Authentication-only Controllers instead call the real local auth
+provider against in-memory SQLite and do not add an empty Service. Replace only
+the authentication/session boundary needed for the test to control the actor.
 
 Focus these scenarios on:
 
@@ -161,11 +163,13 @@ business and authorization combinations belong primarily to Service tests.
 ## Hook Tests
 
 Hook tests use JSDOM and a fresh QueryClient. An Action-backed Hook test calls the
-real Action -> Service -> Model path against in-memory SQLite. A Route-backed
-Hook test replaces only browser network transport; its separate Route test calls
-the real Route -> Service -> Model path. Authenticated user-owned keys always
-include actor identity. For Action-backed optimistic writes, use the existing
-`deferred` helper to pause authentication so the pending state is observable.
+real Action -> Service -> Model path against in-memory SQLite. For an
+authentication-only flow, it calls the real Action -> local auth provider ->
+in-memory SQLite path. A Route-backed Hook test replaces only browser network
+transport; its separate Route test calls the real server path. Authenticated
+user-owned keys always include actor identity. For Action-backed optimistic
+writes, use the existing `deferred` helper to pause authentication so the pending
+state is observable.
 
 ```typescript
 // @vitest-environment jsdom
@@ -214,7 +218,9 @@ interaction and presentation outcomes. Do not repeat database assertions here.
 
 - Every Technical Scenario has one clearly traceable `it()` block.
 - Every functional Check is covered at the owning technical boundary.
-- Model, Service, Action, Route, and Action-backed Hook persistence paths use real in-memory SQLite.
+- Model, Service, Action, Route, and Action-backed Hook persistence paths use
+  real in-memory SQLite, including the real local provider for authentication-only
+  flows.
 - Only framework, authentication, external network, or Component-Hook boundaries
   are replaced.
 - Tests assert outcomes rather than private calls.

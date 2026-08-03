@@ -1,6 +1,6 @@
 ---
 name: routes
-description: Write thin Next.js Controller routes for behavior Services. Use when creating or updating an HTTP endpoint for streaming, webhooks, HTTP semantics, or external clients.
+description: Write thin Next.js Controller routes for behavior Services or authentication-only local-provider operations. Use when creating or updating an HTTP endpoint for streaming, webhooks, HTTP semantics, or external clients.
 ---
 
 # Routes
@@ -11,6 +11,7 @@ invocation.
 
 ```text
 Hook or external client -> Route -> Service -> Model / Integration
+                             `-> local auth provider (authentication-only)
 ```
 
 A behavior may have at most one Action and one Route. They may coexist when they
@@ -22,25 +23,28 @@ entry point.
 Keep every Route in the Controller layer:
 
 1. Authenticate the request, or require the webhook's transport credential.
-2. Parse and convert the HTTP transport into the Service command input.
-3. Call exactly one behavior-named Service through its public `static execute`.
-4. Translate known Service failures into stable HTTP responses or stream events.
+2. Parse and convert the HTTP transport into the server command input.
+3. Normally call exactly one behavior-named Service through its public
+   `static execute`. An authentication-only Route may call the narrow local
+   `@/lib/auth` provider directly instead of adding an empty Service.
+4. Translate known server failures into stable HTTP responses or stream events.
 5. Return a stable fallback for unexpected failures without exposing raw errors.
 
 Transport parsing may check JSON shape and primitive types. Do not duplicate
 authoritative domain constraints such as minimum lengths, ownership, allowed
-status transitions, or uniqueness. The Service validates those rules again and
-remains authoritative.
+status transitions, or uniqueness. The Service, when present, validates those
+rules again and remains authoritative.
 
 Never import Models, Drizzle, schema tables, database clients, Policies, or
-Integrations. Never accept an actor or ownership identifier supplied by browser
-input; derive the actor from authentication.
+general Integrations. The direct-provider exception is limited to `@/lib/auth`
+for authentication-only operations. Never accept an actor or ownership
+identifier supplied by browser input; derive the actor from authentication.
 
 ## Location
 
 ```text
 app/[page]/behaviors/[name]/
-  [name].service.ts
+  [name].service.ts             # when application behavior requires it
   routes/
     route.ts
   tests/
@@ -300,7 +304,8 @@ then describe each scenario with `Emit:` steps.
 Create `tests/[name].route.test.ts` with Vitest:
 
 - Call the real exported Route through its real Service, Policies, Models, and
-  in-memory SQLite database.
+  in-memory SQLite database. For an authentication-only Route, call the real
+  local auth provider through the Route against in-memory SQLite.
 - Replace only authentication, unavailable framework transport primitives, and
   external network providers.
 - Use `PreDB` and `PostDB` for persistence outcomes.
@@ -308,7 +313,7 @@ Create `tests/[name].route.test.ts` with Vitest:
   error translation, and a stable unknown-error response.
 - For SSE, verify event order, translated error events, and stream closure.
 - For webhooks, verify missing/invalid credentials and stable acknowledgement.
-- Do not mock the Service, Models, Drizzle, or database.
+- Do not mock the Service, local auth provider, Models, Drizzle, or database.
 
 ```bash
 bun run test path/to/tests/name.route.test.ts
@@ -318,7 +323,8 @@ bun run test path/to/tests/name.route.test.ts
 
 - Authenticate or require the webhook credential.
 - Parse transport without duplicating domain rules.
-- Call exactly one behavior-named Service.
+- Normally call exactly one behavior-named Service. Authentication-only Routes
+  may call the narrow local `@/lib/auth` provider directly.
 - Keep all Infrastructure imports out of the Route.
 - Translate every known failure and hide unexpected exception details.
 - Close streams on success and failure.

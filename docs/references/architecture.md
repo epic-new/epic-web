@@ -32,8 +32,12 @@
 ```
 
 **Critical rule**: production dependencies flow downward one layer at a time.
-Presentation cannot skip Controller, and Controller cannot skip Service to access
-Infrastructure directly.
+Presentation cannot skip Controller, and Controllers normally delegate behavior
+to a Service before Infrastructure is accessed. The only exception is an
+authentication-only Controller, which may call the narrow `@/lib/auth` API
+directly for sign-in, sign-up, sign-out, or session establishment. This exception
+does not permit direct access to Models, Drizzle, schema tables, Policies, or
+general Integrations.
 
 Layers describe responsibilities and import boundaries, not top-level folders.
 Feature files remain colocated in `app/[page]/behaviors/[name]/`.
@@ -69,21 +73,31 @@ Integrations, or other server-only implementation code
 
 | Component | Responsibility |
 |-----------|----------------|
-| **Actions** | Thin Server Action controllers for authentication, transport conversion, calling one Service, and error translation |
+| **Actions** | Thin Server Action controllers for authentication, transport conversion, calling one Service when application behavior is involved, and error translation |
 | **Routes** | HTTP controllers for streaming, webhooks, HTTP semantics, or external clients |
 | **Workflow entry points** | Durable invocation and checkpoint coordination; side-effecting steps delegate to Services |
 
-**May import**: Services, authentication utilities, framework request/response APIs
+**May import**: Services, the narrow `@/lib/auth` API, framework request/response
+APIs
 
 **Must NOT import**: Models, Drizzle, schema tables, database clients,
-Integrations, React, `window`, or Jotai atoms
+Policies, general Integrations, React, `window`, or Jotai atoms
 
 Actions and Routes implement the Controller role without requiring controller
-classes or a controller directory. Each entry point calls exactly one Service and
-never accesses Infrastructure directly.
+classes or a controller directory. Each entry point normally calls exactly one
+Service and never accesses Infrastructure directly.
 
 Authentication belongs here. Controllers derive the actor from the request; they
 never accept an actor or ownership identifier supplied by browser input.
+
+An authentication-only Controller may call `@/lib/auth` directly and omit a
+pass-through Service when its entire purpose is sign-in, sign-up, sign-out, or
+session establishment. This narrow auth API is a Controller-owned boundary, not
+permission to call arbitrary provider SDKs or other Infrastructure modules.
+
+If the flow introduces application-specific business rules, authorization over
+records, Model access, or a general Integration—for example, provisioning a
+workspace during sign-up—the Controller delegates that behavior to one Service.
 
 Schema-inferred records may be returned through a Service and Controller as plain,
 serializable values. Presentation imports the public result type from the Action
@@ -98,14 +112,15 @@ Presentation modules.
 
 | Component | Responsibility |
 |-----------|----------------|
-| **Service classes** | One stateless class per behavior; authoritative validation, authorization, business rules, sequencing, and transaction boundaries |
+| **Service classes** | One stateless class per behavior that contains application logic; authoritative validation, authorization, business rules, sequencing, and transaction boundaries |
 | **Policies** | Pure authorization decisions over an actor and the records involved in the behavior |
 
-The existing server Behavior class becomes a Service by renaming
-`[name].behavior.ts` to `[name].service.ts`. It remains in the behavior directory,
-keeps the behavior-named class (for example `CreateItem`), and keeps one public
-`static execute` method. This is a rename and responsibility split, not an
-additional abstraction or a `CreateItemService` wrapper.
+When a behavior requires application logic, the existing server Behavior class
+becomes a Service by renaming `[name].behavior.ts` to `[name].service.ts`. It
+remains in the behavior directory, keeps the behavior-named class (for example
+`CreateItem`), and keeps one public `static execute` method. This is a rename and
+responsibility split, not an additional abstraction or a `CreateItemService`
+wrapper. Authentication-only Controllers do not add an empty Service module.
 
 Every Service that requires authorization calls a private `static authorize(actor,
 records)` from inside `execute`; that method delegates the decision to a Policy.
@@ -152,13 +167,17 @@ authorization decisions, encode use-case sequencing, or return class instances.
 - **Controller** never calls **Presentation**
 - **Presentation** Components never contain server code or manage atoms directly
 - **Presentation** Hooks never touch the database directly
-- **Controller** entry points never import Models, Drizzle, or Integrations
+- **Controller** entry points never import Models, Drizzle, Policies, or general
+  Integrations
 
 ```text
 Component -> Hook -> Action/Route -> Service.execute
                                          |---> Policy
                                          |---> Model ------> Database
                                          `---> Integration -> External system
+
+Component -> Hook -> Action/Route -> @/lib/auth
+                                      (authentication-only exception)
 ```
 
 ---
@@ -364,8 +383,10 @@ reacts to outcomes.
 
 - Owns authentication and request-derived actor construction
 - Owns transport conversion and response/error translation
-- Calls exactly one Service
-- Never accesses Models, Drizzle, or Integrations directly
+- Calls exactly one Service when application behavior is involved
+- May omit a pass-through Service only for sign-in, sign-up, sign-out, or session
+  establishment that uses the narrow `@/lib/auth` API
+- Never accesses Models, Drizzle, Policies, or general Integrations directly
 
 ### Service Constraints
 
@@ -405,8 +426,10 @@ Violations:
 | **Service** | No | No | Yes | Yes |
 | **Infrastructure** | No | No | No | Yes |
 
-Production code may not skip a layer. Tests may import database and schema modules
-only for deterministic `PreDB` setup and `PostDB` assertions.
+Production code may not skip a layer. The narrow authentication-only Controller
+exception above does not make `@/lib/auth` a general Infrastructure entry point.
+Tests may import database and schema modules only for deterministic `PreDB` setup
+and `PostDB` assertions.
 
 ---
 
@@ -417,26 +440,33 @@ an isolated in-memory SQLite database. The database is recreated or cleared
 between scenarios, so each test can describe its state with `PreDB`, execute the
 real path, and verify persisted state with `PostDB`.
 
-The former server Behavior class is now the Service class, so its direct module
-test is `[name].service.test.ts`. Do not keep or generate a parallel
-`[name].behavior.test.ts`. *Behavior* still names the functional vertical slice
-and its user-facing scenarios; it is no longer a separate server module or test
-boundary.
+When a Service exists, the former server Behavior class is now that Service class,
+so its direct module test is `[name].service.test.ts`. Do not keep or generate a
+parallel `[name].behavior.test.ts`. *Behavior* still names the functional vertical
+slice and its user-facing scenarios; it is no longer a separate server module or
+test boundary. An authentication-only behavior has Action and Hook tests but no
+empty Service test.
 
 - Model tests call the static Model directly.
 - Service tests call the behavior-named Service's `execute` method with real
   Models and Policies.
-- Action tests mock only authentication or framework request context, then
-  exercise the real Action -> Service -> Model path.
+- Action tests mock only authentication or framework request context when that is
+  an outer boundary, then exercise the real Action -> Service -> Model path.
+- Authentication-only Action tests may instead exercise the real Action -> auth
+  provider -> in-memory SQLite path without introducing or mocking a pass-through
+  Service.
 - Hook tests call the public handler and exercise the real Hook -> Action/Route ->
-  Service -> Model path while asserting both TanStack Query cache state and the
-  database. For Route-backed Hooks, replace only the unavailable browser network
-  transport while keeping the real Route test as the HTTP contract boundary.
+  Service -> Model path, or the real Hook -> Action -> auth provider -> in-memory
+  SQLite path for authentication-only behaviors, while asserting both TanStack
+  Query cache state and the database. For Route-backed Hooks, replace only the
+  unavailable browser network transport while keeping the real Route test as the
+  HTTP contract boundary.
 
 Do not mock Models, Services, Actions, or the database inside those integration
 paths. Mock only boundaries that cannot be meaningfully local, such as session
 retrieval, framework transport objects, external network providers, and
-clocks/randomness when determinism requires it.
+clocks/randomness when determinism requires it. Do not mock the local auth
+provider when it can run deterministically against the in-memory database.
 
 ---
 
@@ -445,7 +475,7 @@ clocks/randomness when determinism requires it.
 | Type | Location | File Pattern |
 |------|----------|--------------|
 | Components | `app/[page]/components/` | `[component-name].tsx` (kebab-case) |
-| Service class | `app/[page]/behaviors/[name]/` | `[name].service.ts` |
+| Service class (when required) | `app/[page]/behaviors/[name]/` | `[name].service.ts` |
 | Policy | Behavior, page-shared, or global shared scope | `[resource].policy.ts` |
 | Behavior hook entry point | `app/[page]/behaviors/[name]/` | `use-[name].hook.ts` |
 | Initial page query + page-wide keys | `app/[page]/` | `[page-name].query.ts` |
@@ -491,13 +521,13 @@ app/[page]/
   behaviors/
     [behavior-name]/
       state.ts                       <- Behavior-level: specific to this behavior
-      [name].service.ts              <- Service class; behavior-named, static execute
+      [name].service.ts              <- Application behavior only; omit for auth-only
       [name].action.ts               <- Thin Controller boundary
       use-[name].hook.ts             <- Exports the public use[Name] hook
       [name].query.ts                <- Additional/on-demand read only; imports page keys
       [name].mutation.ts             <- Write behavior only
       tests/
-        [name].service.test.ts
+        [name].service.test.ts       <- When a Service exists
         [name].action.test.ts
         use-[name].hook.test.tsx
 ```
@@ -513,7 +543,8 @@ app/[page]/
 ### When to Use Each Level
 
 **Behavior-level** (default):
-- State, hooks, Controllers, Services, and Policies specific to one behavior
+- State, hooks, Controllers, and any required Services or Policies specific to
+  one behavior
 - Start here; promote to higher levels only when needed
 
 **Page-level shared**:

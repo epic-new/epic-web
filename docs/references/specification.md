@@ -545,13 +545,22 @@ For functions that modify database state (like server actions), include scenario
 - **PostDB** - database state after execution (CSV format)
 
 When the function is a Server Action, it is a Controller contract: it
-authenticates the request, adapts transport input, calls exactly one Service, and
-translates the result or error. It never imports a Model, Drizzle, schema table,
-or Integration. Every Action returns the shared serializable union
+authenticates the request, adapts transport input, normally calls exactly one
+Service, and translates the result or error. An authentication-only Action for
+sign-in, sign-up, sign-out, or session establishment may call the narrow
+`@/lib/auth` API directly and omit a pass-through Service. If the flow includes
+application-specific business rules, authorization over records, Models, or
+general Integrations, it requires a Service. An Action never imports a Model,
+Drizzle, schema table, Policy, or general Integration. Application Actions return
+the shared serializable union
 `ActionResponse<T> = { success: true; data: T } | { success: false; error: string }`.
+An authentication-only form Action may instead declare a form-oriented
+serializable result such as `{ error: string | null }`, with redirect or `void`
+on success, when that is the contract consumed by its Hook or form. Its exact
+result must be specified rather than silently treated as `ActionResponse<T>`.
 Action scenarios use `Returns:` for both success and failure responses; errors
-from authentication or the Service are translated into the failure variant rather
-than specified as thrown errors.
+from authentication or the Service are translated into the declared failure
+result rather than specified as thrown errors.
 
 ### Scenario (Simple Function)
 
@@ -633,10 +642,10 @@ A Service specification consists of:
 
 ### Scenarios Section
 
-The Service is the existing behavior-named server class renamed from
-`[name].behavior.ts` to `[name].service.ts`; it is not an additional wrapper and
-does not require a `Service` suffix on the class name. Each class is stateless and
-exposes one public `static execute`.
+When application logic requires a Service, it is the existing behavior-named
+server class renamed from `[name].behavior.ts` to `[name].service.ts`; it is not
+an additional wrapper and does not require a `Service` suffix on the class name.
+Each class is stateless and exposes one public `static execute`.
 
 When authorization is required, `execute` calls a private
 `static authorize(actor, records)` method. That method delegates the decision to
@@ -1012,8 +1021,11 @@ id, user_id, name, status
 Route specifications describe **HTTP Controller endpoints** for behaviors that
 need HTTP semantics, streaming, or external access. They are the HTTP counterpart
 to Server Actions. A Route authenticates or verifies its transport boundary,
-adapts the request, calls exactly one Service, and translates the response; it
-does not call Models, Drizzle, or Integrations directly.
+adapts the request, normally calls exactly one Service, and translates the
+response. An authentication-only Route may instead call the narrow `@/lib/auth`
+API directly. It does not call Models, Drizzle, Policies, or general Integrations
+directly, and any application-specific business rule or record authorization
+requires a Service.
 
 ### Purpose
 
@@ -1277,10 +1289,14 @@ id, status, total
 - Technical specs are a flat catalog (Function, Service, Policy, Model,
   Integration, Component, Hook, Route, Workflow)
 - Thin Presentation: the client triggers intent; Controllers adapt transport,
-  Services realize business behavior, and Infrastructure performs external effects
+  Services realize application business behavior, and Infrastructure performs
+  external effects. Authentication-only Controllers may call the narrow
+  `@/lib/auth` API without a pass-through Service
 - A behavior may have at most one Action, one Route, and one Workflow — each serves a distinct purpose
-- Model, Service, Action, and Hook persistence tests use real in-memory SQLite;
-  only authentication/framework and external-system boundaries are replaced
+- Model, Service, Action, and Hook persistence tests use real in-memory SQLite.
+  Authentication-only Action-backed Hooks may exercise the real Action -> auth
+  provider -> in-memory SQLite path; replace only unavailable framework or
+  external-system boundaries
 - State ownership is always explicit
 - Omitted sections are meaningful
 - Formats are minimal and consistent

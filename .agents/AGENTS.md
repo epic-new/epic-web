@@ -9,14 +9,21 @@ This file provides guidance to coding agents (Claude Code, Codex, OpenCode) work
 | Layer | Components | May Import | Must NOT Import |
 |-------|------------|------------|-----------------|
 | **Presentation** | Components, Hooks, Queries, Mutations, UI States | React, Zod, TanStack Query, Jotai, Controller entry points | Services, Policies, Models, Drizzle, Integrations |
-| **Controller** | Actions, Routes, Workflow entry points | Services, auth and transport utilities | Models, Drizzle, schema tables, Integrations, React |
+| **Controller** | Actions, Routes, Workflow entry points | Services, the narrow `@/lib/auth` API, and transport utilities | Models, Drizzle, schema tables, Policies, general Integrations, React |
 | **Service** | Behavior-named Service classes, Policies | Models, Integrations, validation and transaction utilities | Actions, Routes, React, TanStack Query, Jotai |
 | **Infrastructure** | Models, database client/schema, Integrations | Drizzle, external APIs | Presentation, Controllers, Services, Policies |
 
 Layers are responsibilities and import boundaries, not top-level folders. Features
 remain organized as vertical slices under `app/[page]/behaviors/[name]/`.
 
-- Controllers authenticate and call exactly one Service; they never import Models.
+- Controllers authenticate and normally call exactly one Service; they never
+  import Models, Drizzle, schema tables, Policies, or general Integrations.
+- Authentication-only Controllers for sign-in, sign-up, sign-out, and session
+  establishment may call the narrow `@/lib/auth` API directly instead of adding
+  a pass-through Service.
+- Once an authentication flow includes application-specific business rules,
+  authorization over records, Models, or general Integrations, it must delegate
+  that behavior to one Service.
 - A Service is the former server Behavior class renamed from `.behavior.ts` to
   `.service.ts`. Keep its behavior-named class and public `static execute` method.
 - Services own authoritative validation, authorization, business rules, and
@@ -24,8 +31,9 @@ remain organized as vertical slices under `app/[page]/behaviors/[name]/`.
   `static authorize(actor, records)` that delegates to a pure Policy.
 - Static Models live in `shared/models`, own all Drizzle queries, and return plain
   schema-inferred records. Models never authenticate or authorize.
-- The former server Behavior module is now the Service module. Test it through
-  `[name].service.test.ts`; do not create a parallel `[name].behavior.test.ts`.
+- When a behavior requires a Service, the former server Behavior module is now
+  that Service module. Test it through `[name].service.test.ts`; do not create a
+  parallel `[name].behavior.test.ts`.
 
 **Server state** (lists, records, caching) is owned by **TanStack Query** (`useQuery`/`useMutation`); **Jotai is for UI state only** (dialogs, selections, filter/sort/page inputs). The initial page read and page-wide query-key factory live in `app/[page]/[page-name].query.ts`; additional or on-demand reads may use `[name].query.ts` beside their behavior. Pages prefetch the initial query and hydrate it with `HydrationBoundary`; mutations are optimistic by default. For authenticated user-owned data, every page-wide query key MUST include the actor/user identity so cached data cannot cross identities; this partitions cache data and never replaces server-side authorization.
 
@@ -53,7 +61,7 @@ Features are organized by behavior:
 app/[page]/
   [page-name].query.ts           # Initial page query + page-wide query keys
   behaviors/[behavior-name]/
-    [behavior-name].service.ts   # Service class (same behavior-named static execute)
+    [behavior-name].service.ts   # Required for application behavior; omit for auth-only
     [behavior-name].action.ts    # Thin server-action boundary
     use-[behavior-name].hook.ts  # Public React hook
     [behavior-name].query.ts     # Additional/on-demand read options (optional)
@@ -62,7 +70,7 @@ app/[page]/
       route.ts                   # Route endpoint (streaming/HTTP semantics)
     state.ts                     # Behavior-specific state (optional)
     tests/
-      [behavior-name].service.test.ts
+      [behavior-name].service.test.ts # When a Service exists
       [behavior-name].action.test.ts
       use-[behavior-name].hook.test.tsx
       [behavior-name].route.test.ts
@@ -113,9 +121,12 @@ bun run test             # All automated tests (Vitest)
 **Rules**:
 - Test outcomes instead of implementation details
 - Use the in-memory SQLite database for Model, Service, Action, and Hook tests
-- Action and Hook tests exercise the real Service and Model path
-- Mock only authentication/framework boundaries, external services, or a
-  component's public Hook contract
+- Action and Hook tests exercise the real Service and Model path, or the real
+  Action -> auth provider -> in-memory SQLite path for authentication-only
+  Controllers
+- Mock only framework boundaries, unavailable external services, or a
+  component's public Hook contract; do not mock the local auth provider when it
+  can run against the in-memory database
 - Start with ONE test, expand later
 - Use PreDB/PostDB for deterministic state
 
@@ -132,6 +143,10 @@ await PostDB(db, schema, { users: [{ name: 'Alice' }] });
 - `/(app)/*` and `/admin/*` require authentication
 - Config: `lib/auth/index.ts`, Client: `lib/auth/client.ts`
 - Server-side: `getUser()` for cached session retrieval
+- Sign-in, sign-up, sign-out, and session establishment are Controller-owned and
+  may use `@/lib/auth` directly while they remain authentication-only
+- Application-specific registration, authorization, persistence, or external
+  effects belong in a Service
 
 ## Epic CLI
 

@@ -25,8 +25,8 @@ Hooks:
 - Run in the browser (Presentation layer)
 - Read server state with `useQuery`; write it with `useMutation`
 - Use Jotai atoms ONLY for UI state — never for server data
-- May perform optional Zod validation for immediate UX feedback; the Service
-  remains authoritative
+- May perform optional Zod validation for immediate UX feedback; the Controller
+  or its Service remains authoritative
 - Call ONE Controller entry point (Action or Route, never both) as the `queryFn`/`mutationFn`
 - Handle optimistic updates and rollback through the query cache
 - NEVER access database or import server-only code
@@ -292,7 +292,7 @@ Lessons that prevent real, hard-to-spot bugs:
 - **Refresh = invalidate, not refetch.** `queryClient.invalidateQueries({ queryKey })` is stable and refetches the whole family; `query.refetch()` captured in a `useCallback` dep is unstable (the query object is new each render).
 - **Client validation is optional UX validation.** When it adds value, parse once
   in the handler before `mutateAsync`; never treat it as authoritative or remove
-  the corresponding Service validation.
+  the corresponding Controller or Service validation.
 - **Authenticated page-wide keys include actor identity.** Every key for user-owned data must include the actor/user identity to prevent cache data crossing identities. This is cache partitioning only; the server action still derives identity from authentication and enforces authorization.
 - **Query modules have NO `'use client'`.** The Server Component and client hooks both import `[page-name].query.ts`; additional behavior `.query.ts` files are also shared. Keep them directive-free. Mutations and additional queries import the page-wide key factory from `[page-name].query.ts`.
 - **Page split.** A page that renders a read is a Server Component (prefetch + `HydrationBoundary`) wrapping a `*-content.tsx` client component that holds dialog/UI state. A page with `useState`/dialogs can't itself be a Server Component.
@@ -422,7 +422,8 @@ export function useStreamingBehavior() {
 ### 1. Optional UX Validation
 - Prefer the input type exposed by the Action contract
 - Add Zod validation in the handler only when immediate client feedback is useful
-- Parse once before `mutateAsync`; the Service still validates authoritatively
+- Parse once before `mutateAsync`; the Controller, or its Service when present,
+  still validates authoritatively
 
 ### 2. Optimistic Updates (via the query cache)
 - Define options in `[name].mutation.ts`; the public hook only consumes them
@@ -434,7 +435,8 @@ export function useStreamingBehavior() {
 ### 3. Error Handling
 - Surface `mutation.error` / `query.error` as a string; `isPending`/`isLoading` for loading
 - Narrow the ActionResponse explicitly in `queryFn`/`mutationFn`; throw its error when `success` is false and return its data otherwise
-- Action and Service errors reject from `mutationFn`, so they reach the same `catch`
+- Controller errors, and Service errors when a Service exists, reject from
+  `mutationFn`, so they reach the same `catch`
 - Provide descriptive error messages
 
 ### 4. State Management
@@ -454,7 +456,7 @@ export function useStreamingBehavior() {
 - NEVER call more than one Controller entry point (Action or Route)
 - NEVER put business logic in hooks - that belongs in Services
 - ALWAYS include both loading and error states (`isPending`/`isLoading` + `error`)
-- NEVER rely on optional client validation instead of Service validation
+- NEVER rely on optional client validation instead of Controller or Service validation
 - ALWAYS preserve the hook's public return shape when refactoring (keep components untouched)
 - ALWAYS define write options in `[name].mutation.ts`
 - ALWAYS make list mutations optimistic (`onMutate`/`onSuccess`/`onError`/`onSettled`); plain mutations otherwise
@@ -474,5 +476,7 @@ Generate test files at `[behavior-path]/tests/use-[behavior-name].hook.test.tsx`
 Read `references/testing.md` before writing a Hook integration test. It shows the
 existing `deferred`, `createTestClient`, and `queryWrapper` helpers and the full
 pending -> success and pending -> rollback paths. Action-backed Hooks exercise
-the real Action -> Service -> Model path; Route-backed Hooks replace only browser
-network transport and rely on the Route test for the real server path.
+the real Action -> Service -> Model path, or the real Action -> local auth
+provider -> in-memory SQLite path for authentication-only behaviors. Route-backed
+Hooks replace only browser network transport and rely on the Route test for the
+real server path.

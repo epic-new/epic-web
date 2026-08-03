@@ -24,13 +24,15 @@ Presentation -> Controller -> Service -> Infrastructure
 - **Presentation** contains Components, Hooks, queries, mutations, cache state,
   and UI-only Jotai state.
 - **Controller** contains Actions, Routes, and workflow entry points.
-- **Service** is the existing behavior-named server class in
-  `[name].service.ts`, with one public `static execute`.
+- **Service**, when application behavior requires one, is the behavior-named
+  server class in `[name].service.ts`, with one public `static execute`.
 - **Policy** is a pure Service-layer authorization decision over an actor and
   records.
 - **Model** is a static Infrastructure class in `shared/models` that owns Drizzle
   and returns plain schema-inferred records.
 - **Integration** is an Infrastructure adapter called by Services.
+- An authentication-only Controller may call the narrow local `@/lib/auth`
+  provider directly instead of adding a pass-through Service.
 
 ## Workflow
 
@@ -64,8 +66,9 @@ Include only units required by the Behavior:
 
 - **Model** scenarios for table-level persistence.
 - **Policy** scenarios for pure authorization decisions.
-- **Service** scenarios for validation, authorization, business rules,
-  transactions, and database outcomes through real Models.
+- **Service** scenarios, when a Service is required, for validation,
+  authorization, business rules, transactions, and database outcomes through
+  real Models.
 - **Action/Route** scenarios for authentication, transport, and error mapping.
 - **Query/Mutation** contract for TanStack Query keys and cache transitions.
 - **Hook** scenarios with explicit cache PreState/Steps/PostState and PostDB when
@@ -80,13 +83,13 @@ technical scenarios at the top level.
 
 ```text
 app/[page]/behaviors/[name]/
-  [name].service.ts
+  [name].service.ts            # when application behavior requires it
   [name].action.ts
   use-[name].hook.ts
   [name].query.ts              # optional read
   [name].mutation.ts           # optional write
   tests/
-    [name].service.test.ts
+    [name].service.test.ts     # when a Service exists
     [name].action.test.ts
     use-[name].hook.test.tsx
 ```
@@ -97,15 +100,17 @@ Do not propose top-level layer directories. Models remain globally shared under
 ### 5. Write Tasks in Dependency Order
 
 1. Model and Integration Infrastructure.
-2. Policy and Service.
+2. Policy and Service, when application rules or record authorization require
+   them. Authentication-only flows omit this step.
 3. Controller Action or Route.
 4. Query/mutation and public Hook.
 5. Components.
 6. Focused tests, full Vitest suite, and typecheck.
 
-Tests use real in-memory SQLite through Models, Services, Actions, and Hooks. Mock
-only authentication/framework primitives, external networks, or a Hook contract
-inside an isolated Component test.
+Tests use real in-memory SQLite through Models, Services, Actions, and Hooks. An
+authentication-only flow uses the real Action -> local auth provider ->
+in-memory SQLite path. Mock only authentication/framework primitives, external
+networks, or a Hook contract inside an isolated Component test.
 
 ## File Handling
 
@@ -132,11 +137,13 @@ content.
 - [ ] Functional Behavior has named Rules and Scenarios.
 - [ ] The issue contains exactly one Behavior.
 - [ ] Every Scenario has Act/Check Steps and relevant PreDB/PostDB.
-- [ ] Model, Policy, Service, Controller, Hook, and Component scenarios have clear
-      owners.
-- [ ] Service file is `[name].service.ts`; its class remains behavior-named with
-      `static execute`.
-- [ ] Controllers authenticate and call one Service, never a Model.
+- [ ] Every required Model, Policy, Service, Controller, Hook, and Component
+      scenario has a clear owner.
+- [ ] When required, the Service file is `[name].service.ts`; its class remains
+      behavior-named with `static execute`.
+- [ ] Controllers authenticate and normally call one Service, never a Model. An
+      authentication-only Controller may call only the narrow local `@/lib/auth`
+      provider and omit the Service.
 - [ ] Services authorize and call Models; Models alone own Drizzle queries.
 - [ ] Hook cache keys include actor identity for user-owned data.
 - [ ] Test tasks preserve the real in-memory database path.

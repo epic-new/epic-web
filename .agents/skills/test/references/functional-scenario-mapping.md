@@ -6,16 +6,17 @@ database assertion at every layer.
 
 ```text
 Functional scenario
-  |-- Service test: validation, authorization, business result, PostDB
+  |-- Service test (when a Service exists): validation, authorization, business result, PostDB
   |-- Action test: authentication, transport, response translation
   |-- Hook test: actor-partitioned cache and pending/success/rollback
   `-- Component test: inputs, interaction, loading/error/output presentation
 ```
 
-There is no server `[name].behavior.test.ts`. The former server Behavior module
-is now the behavior-named Service class, so its test is
-`[name].service.test.ts`. “Functional scenario mapping” describes coverage
-across layers; it is not another implementation module or test boundary.
+There is no server `[name].behavior.test.ts`. When application behavior requires
+a Service, the former server Behavior module is now the behavior-named Service
+class and its test is `[name].service.test.ts`. Authentication-only flows omit
+both. “Functional scenario mapping” describes coverage across layers; it is not
+another implementation module or test boundary.
 
 ## Service tests
 
@@ -25,8 +26,10 @@ business rules, transactions, and persistence. Never mock the Model or database.
 
 ## Action tests
 
-Call the real Action through its real Service and Models. Replace only request
-authentication and unavailable framework primitives.
+Call the real Action through its real Service and Models. An authentication-only
+Action instead calls the real local auth provider against in-memory SQLite and
+does not add an empty Service. Replace only request authentication and
+unavailable framework primitives.
 
 ```typescript
 await PreDB(db, schema, { item: [] });
@@ -43,10 +46,11 @@ await PostDB(db, schema, {
 Use JSDOM, a fresh QueryClient, actor-partitioned page keys, and the public
 `handleX` handler. An Action-backed Hook test uses the real Action -> Service ->
 Model -> in-memory SQLite path and may replace authentication/framework
-boundaries. A Route-backed Hook test replaces only browser network transport;
-its Route test covers the real Route -> Service -> Model path. Use the existing
-`deferred` helper to hold an Action-backed boundary open long enough to inspect
-optimistic state.
+boundaries. An authentication-only Hook instead uses the real Action -> local
+auth provider -> in-memory SQLite path. A Route-backed Hook test replaces only
+browser network transport; its Route test covers the real server path. Use the
+existing `deferred` helper to hold an Action-backed boundary open long enough to
+inspect optimistic state.
 
 ```typescript
 const auth = deferred<Awaited<ReturnType<typeof getUser>>>();
@@ -112,8 +116,9 @@ return, cache, and database outcomes over internal call assertions.
 
 - Every functional scenario maps to named technical tests.
 - Persistence paths use real in-memory SQLite with PreDB/PostDB.
-- Service tests call real Models; Action-backed Hook tests call the real Service
-  through the Action; Route-backed Hooks have a real-path Route test.
+- When a Service exists, its tests call real Models and Action-backed Hook tests
+  call it through the Action. Authentication-only Hooks call the real local auth
+  provider through the Action. Route-backed Hooks have a real-path Route test.
 - Every authenticated user-owned cache key includes actor identity.
 - Hook writes cover pending, success, and rollback through `handleX`.
 - Framework/external boundaries are the only replacements.

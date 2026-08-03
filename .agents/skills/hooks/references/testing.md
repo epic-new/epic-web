@@ -2,10 +2,13 @@
 
 Generate `[behavior-path]/tests/use-[behavior-name].hook.test.tsx`. Use JSDOM,
 a fresh QueryClient, and the public `handleX` handler. For an Action-backed Hook,
-use the real Action -> Service -> Model path and in-memory SQLite, replacing only
+use the real Action -> Service -> Model path and in-memory SQLite. An
+authentication-only Hook instead uses the real Action -> local auth provider ->
+in-memory SQLite path without adding a pass-through Service. Replace only
 authentication/framework or unavailable external boundaries. For a Route-backed
 Hook, replace only browser network transport; its Route test separately exercises
-the real Route -> Service -> Model path.
+the real Route -> Service -> Model path, or the direct local-auth path for an
+authentication-only Route.
 
 For optimistic writes, test both scenarios:
 
@@ -15,8 +18,8 @@ For optimistic writes, test both scenarios:
 3. Resolve authentication, await the request, then assert the authoritative
    success record and PostDB.
 4. In a failure test, observe the pending record, resolve the real request to a
-   Service error, assert rejection/error, restore the exact cache snapshot, and
-   assert unchanged PostDB.
+   Controller or Service error, assert rejection/error, restore the exact cache
+   snapshot, and assert unchanged PostDB.
 
 ```typescript
 // @vitest-environment jsdom
@@ -135,5 +138,6 @@ describe('Create Item hook scenarios', () => {
 ```
 
 Use `setQueriesData`/`getQueriesData` assertions when the mutation updates a
-whole list family. Never mock the Action, Service, Model, Policy, or Drizzle in
-an Action-backed Hook integration path.
+whole list family. Never mock the Action, Service, Model, Policy, Drizzle, or a
+local auth provider that can run deterministically in an Action-backed Hook
+integration path.

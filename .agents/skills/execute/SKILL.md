@@ -25,9 +25,10 @@ for the parts the issue requires.
 
 1. Create or update static Models and their focused in-memory database tests.
 2. Create or update Integrations when required.
-3. Create the behavior Service, its Policies, and its focused
-   `[name].service.test.ts` using PreDB/PostDB. Do not create a server
-   `[name].behavior.test.ts`.
+3. When the flow contains application business rules, records, authorization,
+   transactions, or integrations, create the behavior Service, its Policies,
+   and its focused `[name].service.test.ts` using PreDB/PostDB. Authentication-only
+   flows omit this step. Do not create a server `[name].behavior.test.ts`.
 4. Create the thin Controller Action or Route and its boundary test.
 5. Create UI-only state and query or mutation option factories.
 6. Create the public behavior hook.
@@ -43,10 +44,13 @@ for the parts the issue requires.
 
 - Presentation imports Controller entry points but never Services, Policies,
   Models, Drizzle, Integrations, or server-only implementation modules.
-- Controller Actions and Routes authenticate, adapt transport, call exactly one
-  Service, and never access Infrastructure directly.
-- A Service uses the behavior-named class in `.service.ts` and keeps one public
-  `static execute`.
+- Controller Actions and Routes authenticate and adapt transport. They normally
+  call exactly one Service and never access Infrastructure directly. An
+  authentication-only Controller may call the narrow local `@/lib/auth` provider
+  directly instead of adding an empty Service; it still may not import Models,
+  Drizzle, Policies, or general Integrations.
+- When required, a Service uses the behavior-named class in `.service.ts` and
+  keeps one public `static execute`.
 - Services own authoritative validation, authorization, business rules,
   sequencing, and transaction boundaries. They call Models and Integrations but
   never write Drizzle queries.
@@ -63,7 +67,8 @@ for the parts the issue requires.
   keys.
 - For authenticated user-owned data, every page-wide key includes the actor/user identity for cache partitioning; server actions still derive identity from authentication and enforce authorization.
 - Writes use a `[name].mutation.ts` module.
-- The Service class is `[name].service.ts`.
+- When required, the Service class is `[name].service.ts`; authentication-only
+  flows omit it.
 - An HTTP Route lives at `behaviors/[name]/routes/route.ts`.
 - The public hook entry point is `use-[name].hook.ts`.
 - A page that renders a read prefetches the query and hydrates its client
@@ -73,7 +78,9 @@ for the parts the issue requires.
 
 Write tests immediately after the server boundary is created.
 
-- Call the real Action or Route through its real Service and Models.
+- Call the real Action or Route through its real Service and Models. For an
+  authentication-only flow, call the real local auth provider through the
+  Controller instead.
 - Use the in-memory SQLite database.
 - Translate specification PreDB/PostDB tables directly.
 - Verify success, validation, authorization, and meaningful failures.
@@ -93,9 +100,10 @@ Hook tests are integration tests for frontend orchestration.
 - Use `// @vitest-environment jsdom`.
 - Create a fresh QueryClient with retries disabled.
 - Seed query cache pre-state when specified.
-- Call the real Action for Action-backed Hooks. For Route-backed Hooks, replace
-  only browser network transport; the separate Route test exercises the real
-  Route -> Service -> Model path.
+- Call the real Action for Action-backed Hooks. Authentication-only Hooks keep
+  the real Action -> local auth provider -> in-memory SQLite path. For
+  Route-backed Hooks, replace only browser network transport; the separate Route
+  test exercises the real server path.
 - Wrap direct mutation calls in async `act()`.
 - Verify optimistic state, final cache state, rollback, and PostDB.
 - Use `waitFor()` for eventual query or mutation state.
@@ -127,7 +135,7 @@ Every functional behavior scenario must map to one or more technical scenarios:
 
 ```text
 Functional scenario
-  ├─ service scenario: business, authorization, and database outcome
+  ├─ service scenario (when a Service exists): business, authorization, and database outcome
   ├─ action/route scenario: authentication and transport outcome
   ├─ hook scenario: orchestration and cache outcome
   └─ component scenario: user interaction and presentation outcome
