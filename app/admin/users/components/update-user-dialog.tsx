@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,36 +18,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useUpdateUser, UpdateUserFormData } from "../behaviors/update-user/use-update-user";
+import {
+  useUpdateUser,
+  type UpdateUserFormData,
+} from "../behaviors/update-user/use-update-user.hook";
 import { toast } from "sonner";
-import { User } from "../state";
+import type { User } from "../users.query";
 
 interface UpdateUserDialogProps {
+  actorId: string;
   user: User | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function UpdateUserDialog({ user, open, onOpenChange }: UpdateUserDialogProps) {
-  const { handleUpdateUser, isLoading } = useUpdateUser();
-  
-
-  const [formData, setFormData] = useState<Omit<UpdateUserFormData, 'userId'>>({
-    email: "",
-    name: "",
-    role: "user",
+export function UpdateUserDialog({ actorId, user, open, onOpenChange }: UpdateUserDialogProps) {
+  const { handleUpdateUser, isLoading } = useUpdateUser(actorId);
+  const [formData, setFormData] = useState<Omit<UpdateUserFormData, "userId">>({
+    email: user?.email ?? "",
+    name: user?.name ?? "",
+    role: user?.role === "admin" ? "admin" : "user",
   });
-
-  // Update form when user changes
-  useEffect(() => {
-    if (user) {
-      setFormData({
-        email: user.email,
-        name: user.name || "",
-        role: (user.role as "user" | "admin") || "user",
-      });
-    }
-  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

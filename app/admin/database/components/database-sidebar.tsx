@@ -7,12 +7,12 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useListTables } from "../behaviors/list-tables/use-list-tables";
+import { useListTables } from "../behaviors/list-tables/use-list-tables.hook";
 import { useState } from "react";
 
-export function DatabaseSidebar() {
+export function DatabaseSidebar({ actorId }: { actorId: string }) {
   const pathname = usePathname();
-  const { tables, isLoading, handleRefresh } = useListTables();
+  const { tables, isLoading, error, handleRefresh } = useListTables(actorId);
   const [search, setSearch] = useState("");
 
   const filteredTables = tables.filter((table) =>
@@ -48,7 +48,11 @@ export function DatabaseSidebar() {
 
       {/* Tables List */}
       <div className="flex-1 overflow-y-auto p-2">
-        {isLoading && tables.length === 0 ? (
+        {error ? (
+          <p role="alert" className="text-sm text-destructive text-center py-4">
+            {error}
+          </p>
+        ) : isLoading && tables.length === 0 ? (
           <div className="space-y-1">
             {[...Array(5)].map((_, i) => (
               <Skeleton key={i} className="h-9 w-full" />

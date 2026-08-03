@@ -18,16 +18,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCreateUser, CreateUserFormData } from "../behaviors/create-user/use-create-user";
+import {
+  useCreateUser,
+  type CreateUserFormData,
+} from "../behaviors/create-user/use-create-user.hook";
 import { toast } from "sonner";
 
 interface CreateUserDialogProps {
+  actorId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) {
-  const { handleCreateUser, isLoading } = useCreateUser();
+export function CreateUserDialog({ actorId, open, onOpenChange }: CreateUserDialogProps) {
+  const { handleCreateUser, isLoading } = useCreateUser(actorId);
   
 
   const [formData, setFormData] = useState<CreateUserFormData>({

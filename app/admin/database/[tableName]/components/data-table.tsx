@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import {
-  ColumnDef,
+  type ColumnDef,
   flexRender,
   getCoreRowModel,
   useReactTable,
-  VisibilityState,
+  type VisibilityState,
 } from "@tanstack/react-table";
 import {
   Table,
@@ -16,8 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAtom } from "jotai";
-import { columnVisibilityAtom, type TableRow as DataRow } from "../state";
+import type { TableRow as DataRow } from "../state";
 import { CellEditor } from "./cell-editor";
 import type { ColumnMetadata } from "../state";
 
@@ -25,7 +24,13 @@ interface DataTableProps {
   columns: ColumnDef<DataRow>[];
   data: DataRow[];
   columnMetadata: ColumnMetadata[];
-  onCellEdit?: (rowId: string | number, column: string, value: unknown) => void;
+  onCellEdit?: (
+    rowId: string | number,
+    column: string,
+    value: unknown,
+  ) => Promise<unknown> | void;
+  columnVisibility: Record<string, boolean>;
+  onColumnVisibilityChange: (visibility: Record<string, boolean>) => void;
 }
 
 export function DataTable({
@@ -33,8 +38,9 @@ export function DataTable({
   data,
   columnMetadata,
   onCellEdit,
+  columnVisibility,
+  onColumnVisibilityChange,
 }: DataTableProps) {
-  const [columnVisibility, setColumnVisibility] = useAtom(columnVisibilityAtom);
   const [editingCell, setEditingCell] = React.useState<{
     rowId: string | number;
     column: string;
@@ -49,7 +55,7 @@ export function DataTable({
         typeof updater === "function"
           ? updater(columnVisibility as VisibilityState)
           : updater;
-      setColumnVisibility(newValue as Record<string, boolean>);
+      onColumnVisibilityChange(newValue as Record<string, boolean>);
     },
     state: {
       columnVisibility: columnVisibility as VisibilityState,

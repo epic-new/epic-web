@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Shield, X } from "lucide-react";
-import { useStopImpersonating } from "../users/behaviors/stop-impersonating/use-stop-impersonating";
+import { useStopImpersonating } from "../users/behaviors/stop-impersonating/use-stop-impersonating.hook";
 import { toast } from "sonner";
 
 interface ImpersonationBannerProps {

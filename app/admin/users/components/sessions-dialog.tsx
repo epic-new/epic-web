@@ -16,23 +16,24 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useListSessions } from "../behaviors/list-sessions/use-list-sessions";
-import { useRevokeSession } from "../behaviors/revoke-session/use-revoke-session";
-import { useRevokeAllSessions } from "../behaviors/revoke-all-sessions/use-revoke-all-sessions";
+import { useListSessions } from "../behaviors/list-sessions/use-list-sessions.hook";
+import { useRevokeSession } from "../behaviors/revoke-session/use-revoke-session.hook";
+import { useRevokeAllSessions } from "../behaviors/revoke-all-sessions/use-revoke-all-sessions.hook";
 import { toast } from "sonner";
-import { User } from "../state";
+import type { User } from "../users.query";
 import { formatDistanceToNow } from "date-fns";
 
 interface SessionsDialogProps {
+  actorId: string;
   user: User | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function SessionsDialog({ user, open, onOpenChange }: SessionsDialogProps) {
-  const { sessions, isLoading } = useListSessions(user?.id, open);
-  const { handleRevokeSession, isLoading: isRevokingOne } = useRevokeSession();
-  const { handleRevokeAllSessions, isLoading: isRevokingAll } = useRevokeAllSessions();
+export function SessionsDialog({ actorId, user, open, onOpenChange }: SessionsDialogProps) {
+  const { sessions, isLoading } = useListSessions(actorId, user?.id, open);
+  const { handleRevokeSession, isLoading: isRevokingOne } = useRevokeSession(actorId);
+  const { handleRevokeAllSessions, isLoading: isRevokingAll } = useRevokeAllSessions(actorId);
 
   const handleRevoke = async (sessionToken: string) => {
     try {

@@ -11,9 +11,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useSetPassword } from "../behaviors/set-password/use-set-password";
+import { useSetPassword } from "../behaviors/set-password/use-set-password.hook";
 import { toast } from "sonner";
-import { User } from "../state";
+import type { User } from "../users.query";
 
 interface SetPasswordDialogProps {
   user: User | null;

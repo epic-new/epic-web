@@ -9,12 +9,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search } from "lucide-react";
-import { useAtom } from "jotai";
-import { usersSearchAtom, usersRoleFilterAtom } from "../state";
+import { useListUsers } from "../behaviors/list-users/use-list-users.hook";
 
-export function UsersTableToolbar() {
-  const [search, setSearch] = useAtom(usersSearchAtom);
-  const [roleFilter, setRoleFilter] = useAtom(usersRoleFilterAtom);
+export function UsersTableToolbar({ actorId }: { actorId: string }) {
+  const { search, setSearch, roleFilter, setRoleFilter } = useListUsers(actorId);
 
   return (
     <div className="flex items-center gap-2">

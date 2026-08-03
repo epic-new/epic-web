@@ -140,7 +140,12 @@ export function RowFormDialog({
       }
     }
 
-    await onSubmit(submitData);
+    try {
+      await onSubmit(submitData);
+    } catch {
+      // The behavior Hook owns the user-facing error state/toast. Prevent the
+      // rejected mutation promise from escaping the form event handler.
+    }
   };
 
   const renderField = (col: ColumnMetadata) => {

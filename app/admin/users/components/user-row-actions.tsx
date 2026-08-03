@@ -18,7 +18,7 @@ import {
   Ban,
   Trash2,
 } from "lucide-react";
-import { User } from "../state";
+import type { User } from "../users.query";
 
 interface UserRowActionsProps {
   user: User;

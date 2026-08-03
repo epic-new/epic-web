@@ -21,7 +21,7 @@ export async function changeAdminPassword(
     }
 
     // 1. Find admin user
-    const [adminUser] = await UserModel.where({ role: 'admin' });
+    const adminUser = await UserModel.findFirstByRole('admin');
 
     if (!adminUser) {
       return { success: false, error: 'USER_NOT_FOUND' };
@@ -59,8 +59,11 @@ export async function changeAdminPassword(
     });
 
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || String(err) };
+  } catch (error: unknown) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 

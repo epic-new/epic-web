@@ -11,13 +11,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useAtom, useAtomValue } from "jotai";
-import { usersPageAtom, usersLimitAtom, User } from "../state";
-import { useListUsers } from "../behaviors/list-users/use-list-users";
+import type { User } from "../users.query";
+import { useListUsers } from "../behaviors/list-users/use-list-users.hook";
 import { UserRowActions } from "./user-row-actions";
 import { formatDistanceToNow } from "date-fns";
 
 interface UsersDataTableProps {
+  actorId: string;
   onEditUser: (user: User) => void;
   onResetPassword: (user: User) => void;
   onChangeRole: (user: User) => void;
@@ -28,6 +28,7 @@ interface UsersDataTableProps {
 }
 
 export function UsersDataTable({
+  actorId,
   onEditUser,
   onResetPassword,
   onChangeRole,
@@ -36,9 +37,7 @@ export function UsersDataTable({
   onBanUser,
   onDeleteUser,
 }: UsersDataTableProps) {
-  const { users, total, isLoading } = useListUsers();
-  const [page, setPage] = useAtom(usersPageAtom);
-  const limit = useAtomValue(usersLimitAtom);
+  const { users, total, isLoading, page, setPage, limit } = useListUsers(actorId);
 
   const totalPages = Math.ceil(total / limit);
   const canGoPrevious = page > 1;

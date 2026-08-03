@@ -10,8 +10,6 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAtom } from "jotai";
-import { columnVisibilityAtom } from "../state";
 import type { ColumnMetadata } from "../state";
 
 interface TableToolbarProps {
@@ -20,6 +18,8 @@ interface TableToolbarProps {
   onAddRow: () => void;
   onRefresh: () => void;
   isLoading?: boolean;
+  columnVisibility: Record<string, boolean>;
+  onToggleColumn: (column: string) => void;
 }
 
 export function TableToolbar({
@@ -28,38 +28,15 @@ export function TableToolbar({
   onAddRow,
   onRefresh,
   isLoading,
+  columnVisibility,
+  onToggleColumn,
 }: TableToolbarProps) {
   const [searchValue, setSearchValue] = React.useState("");
-  const [columnVisibility, setColumnVisibility] = useAtom(columnVisibilityAtom);
-
-  // Initialize visibility for all columns if not set
-  React.useEffect(() => {
-    const initialVisibility: Record<string, boolean> = {};
-    let needsUpdate = false;
-
-    for (const col of columns) {
-      if (columnVisibility[col.name] === undefined) {
-        initialVisibility[col.name] = true;
-        needsUpdate = true;
-      }
-    }
-
-    if (needsUpdate) {
-      setColumnVisibility((prev) => ({ ...prev, ...initialVisibility }));
-    }
-  }, [columns, columnVisibility, setColumnVisibility]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchValue(value);
     onSearch(value);
-  };
-
-  const toggleColumnVisibility = (columnName: string) => {
-    setColumnVisibility((prev) => ({
-      ...prev,
-      [columnName]: !prev[columnName],
-    }));
   };
 
   return (
@@ -94,7 +71,7 @@ export function TableToolbar({
               <DropdownMenuCheckboxItem
                 key={column.name}
                 checked={columnVisibility[column.name] !== false}
-                onCheckedChange={() => toggleColumnVisibility(column.name)}
+                onCheckedChange={() => onToggleColumn(column.name)}
               >
                 {column.name}
               </DropdownMenuCheckboxItem>

@@ -1,18 +1,23 @@
-import { Suspense } from "react";
+import { dehydrate, HydrationBoundary } from "@tanstack/react-query";
+import { getUser } from "@/lib/auth";
+import { getQueryClient } from "@/lib/get-query-client";
+import { adminStatsQuery } from "./admin.query";
 import { AdminDashboard } from "./components/admin-dashboard";
-import { AdminDashboardSkeleton } from "./components/admin-dashboard-skeleton";
-import { getAdminStats } from "./behaviors/admin-stats/admin-stats.action";
 
-export default function AdminPage() {
+export default async function AdminPage() {
+  const { user } = await getUser();
+
+  // The parent layout renders its access-denied state for these requests.
+  if (!user || user.role !== "admin") {
+    return null;
+  }
+
+  const queryClient = getQueryClient();
+  await queryClient.prefetchQuery(adminStatsQuery(user.id));
+
   return (
-    <Suspense fallback={<AdminDashboardSkeleton />}>
-      <AdminDashboardContent />
-    </Suspense>
+    <HydrationBoundary state={dehydrate(queryClient)}>
+      <AdminDashboard actorId={user.id} />
+    </HydrationBoundary>
   );
-}
-
-async function AdminDashboardContent() {
-  const stats = await getAdminStats();
-
-  return <AdminDashboard stats={stats} />;
 }

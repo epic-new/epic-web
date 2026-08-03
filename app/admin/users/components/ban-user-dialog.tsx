@@ -12,20 +12,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useBanUser } from "../behaviors/ban-user/use-ban-user";
-import { useUnbanUser } from "../behaviors/unban-user/use-unban-user";
+import { useBanUser } from "../behaviors/ban-user/use-ban-user.hook";
+import { useUnbanUser } from "../behaviors/unban-user/use-unban-user.hook";
 import { toast } from "sonner";
-import { User } from "../state";
+import type { User } from "../users.query";
 
 interface BanUserDialogProps {
+  actorId: string;
   user: User | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function BanUserDialog({ user, open, onOpenChange }: BanUserDialogProps) {
-  const { handleBanUser, isLoading: isBanning } = useBanUser();
-  const { handleUnbanUser, isLoading: isUnbanning } = useUnbanUser();
+export function BanUserDialog({ actorId, user, open, onOpenChange }: BanUserDialogProps) {
+  const { handleBanUser, isLoading: isBanning } = useBanUser(actorId);
+  const { handleUnbanUser, isLoading: isUnbanning } = useUnbanUser(actorId);
   
 
   const [banReason, setBanReason] = useState("");

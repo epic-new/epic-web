@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams } from "next/navigation";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { DataTable } from "./components/data-table";
@@ -13,17 +12,20 @@ import { RowFormDialog } from "./components/row-form-dialog";
 import { DeleteConfirmation } from "./components/delete-confirmation";
 import { Pagination } from "./components/pagination";
 
-import { useTableData } from "./behaviors/view-table/use-table-data";
-import { useAddRow } from "./behaviors/add-row/use-add-row";
-import { useEditRow } from "./behaviors/edit-row/use-edit-row";
-import { useDeleteRow } from "./behaviors/delete-row/use-delete-row";
+import { useViewTable } from "./behaviors/view-table/use-view-table.hook";
+import { useAddRow } from "./behaviors/add-row/use-add-row.hook";
+import { useEditRow } from "./behaviors/edit-row/use-edit-row.hook";
+import { useDeleteRow } from "./behaviors/delete-row/use-delete-row.hook";
 
 import type { TableRow } from "./state";
 
-export function TableViewContent() {
-  const params = useParams();
-  const tableName = params.tableName as string;
-
+export function TableViewContent({
+  actorId,
+  tableName,
+}: {
+  actorId: string;
+  tableName: string;
+}) {
   const {
     rows,
     columns,
@@ -33,11 +35,14 @@ export function TableViewContent() {
     isLoading,
     error,
     sort,
+    columnVisibility,
     handleSortChange,
     handleFilterChange,
     handleGoToPage,
     handleRefresh,
-  } = useTableData(tableName);
+    handleColumnVisibilityChange,
+    handleToggleColumn,
+  } = useViewTable(actorId, tableName);
 
   const {
     handleAddRow,
@@ -47,7 +52,7 @@ export function TableViewContent() {
     isDuplicate,
     duplicateRow,
     isLoading: isAddLoading,
-  } = useAddRow(tableName);
+  } = useAddRow(actorId, tableName);
 
   const {
     handleEditRow,
@@ -57,7 +62,7 @@ export function TableViewContent() {
     isDialogOpen: isEditDialogOpen,
     selectedRow: editingRow,
     isLoading: isEditLoading,
-  } = useEditRow(tableName);
+  } = useEditRow(actorId, tableName);
 
   const {
     handleDeleteRow,
@@ -66,7 +71,7 @@ export function TableViewContent() {
     isDialogOpen: isDeleteDialogOpen,
     selectedRow: deletingRow,
     isLoading: isDeleteLoading,
-  } = useDeleteRow(tableName);
+  } = useDeleteRow(actorId, tableName);
 
   // Build column definitions
   const tableColumns: ColumnDef<TableRow>[] = React.useMemo(() => {
@@ -151,6 +156,8 @@ export function TableViewContent() {
         onAddRow={() => openAddDialog()}
         onRefresh={handleRefresh}
         isLoading={isLoading}
+        columnVisibility={columnVisibility}
+        onToggleColumn={handleToggleColumn}
       />
 
       {isLoading && rows.length === 0 ? (
@@ -168,6 +175,8 @@ export function TableViewContent() {
             data={rows}
             columnMetadata={columns}
             onCellEdit={handleEditCell}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={handleColumnVisibilityChange}
           />
           <Pagination
             page={page}
@@ -204,7 +213,9 @@ export function TableViewContent() {
         onClose={closeDeleteDialog}
         onConfirm={() => {
           if (deletingRow?.id) {
-            handleDeleteRow(deletingRow.id as string | number);
+            void handleDeleteRow(deletingRow.id as string | number).catch(() => {
+              // The behavior Hook already exposes and toasts the failure.
+            });
           }
         }}
         isLoading={isDeleteLoading}

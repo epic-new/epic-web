@@ -1,21 +1,19 @@
-import { queryOptions } from '@tanstack/react-query';
-import { listSessions } from './actions/list-sessions.action';
-import type { Session } from '@/app/admin/users/state';
+import { queryOptions } from "@tanstack/react-query";
+import { usersKeys } from "../../users.query";
+import {
+  listSessions,
+  type ListSessionsResult,
+} from "./list-sessions.action";
 
-export const sessionsKeys = {
-  all: ['sessions'] as const,
-  list: (userId: string) => [...sessionsKeys.all, 'list', userId] as const,
-};
+export type Session = ListSessionsResult[number];
 
-export function listSessionsQuery(userId: string) {
+export function listSessionsQuery(actorId: string, userId: string) {
   return queryOptions({
-    queryKey: sessionsKeys.list(userId),
+    queryKey: usersKeys.sessionList(actorId, userId),
     queryFn: async (): Promise<Session[]> => {
-      const result = await listSessions({ userId });
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      return result.sessions;
+      const response = await listSessions({ userId });
+      if (!response.success) throw new Error(response.error);
+      return response.data;
     },
   });
 }

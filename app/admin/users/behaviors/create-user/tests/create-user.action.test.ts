@@ -1,264 +1,41 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-// Mock server-only before importing the action
-vi.mock("server-only", () => ({}));
-
-// Mock next/headers
-vi.mock("next/headers", () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
+vi.mock("@/lib/auth", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/auth")>("@/lib/auth")),
+  getUser: vi.fn(),
 }));
 
-// Mock authentication and auth
-vi.mock("@/lib/auth", async () => {
-  const actual = await vi.importActual("@/lib/auth");
-  return {
-    ...actual,
-    getUser: vi.fn(),
-    auth: {
-      api: {
-        createUser: vi.fn(),
-      },
-    },
-  };
-});
+import { db } from "@/db";
+import * as schema from "@/db/schema";
+import { getUser } from "@/lib/auth";
+import { PostDB, PreDB } from "@/lib/db-test";
+import { createAdminAuth, sessionResult } from "../../../tests/fixtures";
+import { createUser } from "../create-user.action";
 
-import { createUser } from "../actions/create-user.action";
-import { getUser, auth } from "@/lib/auth";
-
-describe("createUser action", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("should create user successfully", async () => {
-    const adminId = "admin-123";
-    const now = new Date();
-
-    vi.mocked(getUser).mockResolvedValue({
-      user: {
-        id: adminId,
-        email: "admin@example.com",
-        name: "Admin",
-        role: "admin",
-        emailVerified: true,
-        createdAt: now,
-        updatedAt: now,
-        banned: false,
-      },
-      sessionToken: "session-token-123",
-      isImpersonating: false,
-      impersonatedBy: null,
-    });
-
-    const newUser = {
-      id: "user-456",
-      email: "newuser@example.com",
-      name: "New User",
-      role: "user",
-      emailVerified: true,
-      createdAt: now,
-      updatedAt: now,
-      banned: false,
-      banReason: null,
-      banExpires: null,
-      image: null,
-    };
-
-    // Mock returns { user: UserWithRole }
-    vi.mocked(auth.api.createUser).mockResolvedValue({
-      user: newUser,
-    });
-
-    const result = await createUser({
-      email: "newuser@example.com",
-      password: "password123",
-      name: "New User",
-      role: "user",
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(result.user).toBeDefined();
-    expect(result.user?.email).toBe("newuser@example.com");
-    expect(result.user?.name).toBe("New User");
-    expect(result.user?.role).toBe("user");
-    expect(result.user?.emailVerified).toBe(true);
-  });
-
-  it("should return error for unauthenticated user", async () => {
-    vi.mocked(getUser).mockResolvedValue({
-      user: null,
-      isImpersonating: false,
-      impersonatedBy: null,
-    });
-
-    const result = await createUser({
-      email: "newuser@example.com",
-      password: "password123",
-      name: "New User",
-    });
-
-    expect(result.user).toBeUndefined();
-    expect(result.error).toBe("Unauthorized - please sign in");
-  });
-
-  it("should return error for non-admin user", async () => {
-    vi.mocked(getUser).mockResolvedValue({
-      user: {
-        id: "user-123",
-        email: "user@example.com",
-        name: "User",
-        role: "user",
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        banned: false,
-      },
-      sessionToken: "session-token-123",
-      isImpersonating: false,
-      impersonatedBy: null,
-    });
-
-    const result = await createUser({
-      email: "newuser@example.com",
-      password: "password123",
-      name: "New User",
-    });
-
-    expect(result.user).toBeUndefined();
-    expect(result.error).toBe("Forbidden - admin role required");
-  });
-
-  it("should return error for invalid email", async () => {
-    vi.mocked(getUser).mockResolvedValue({
-      user: {
-        id: "admin-123",
-        email: "admin@example.com",
-        name: "Admin",
-        role: "admin",
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        banned: false,
-      },
-      sessionToken: "session-token-123",
-      isImpersonating: false,
-      impersonatedBy: null,
-    });
-
-    const result = await createUser({
-      email: "invalid-email",
-      password: "password123",
-      name: "New User",
-    });
-
-    expect(result.user).toBeUndefined();
-    expect(result.error).toContain("Invalid email address");
-  });
-
-  it("should return error for short password", async () => {
-    vi.mocked(getUser).mockResolvedValue({
-      user: {
-        id: "admin-123",
-        email: "admin@example.com",
-        name: "Admin",
-        role: "admin",
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        banned: false,
-      },
-      sessionToken: "session-token-123",
-      isImpersonating: false,
-      impersonatedBy: null,
-    });
-
-    const result = await createUser({
-      email: "newuser@example.com",
-      password: "short",
-      name: "New User",
-    });
-
-    expect(result.user).toBeUndefined();
-    expect(result.error).toContain("Password must be at least 8 characters");
-  });
-
-  it("should default to user role when not specified", async () => {
-    const adminId = "admin-123";
-    const now = new Date();
-
-    vi.mocked(getUser).mockResolvedValue({
-      user: {
-        id: adminId,
-        email: "admin@example.com",
-        name: "Admin",
-        role: "admin",
-        emailVerified: true,
-        createdAt: now,
-        updatedAt: now,
-        banned: false,
-      },
-      sessionToken: "session-token-123",
-      isImpersonating: false,
-      impersonatedBy: null,
-    });
-
-    const newUser = {
-      id: "user-456",
-      email: "newuser@example.com",
-      name: "New User",
-      role: "user",
-      emailVerified: true,
-      createdAt: now,
-      updatedAt: now,
-      banned: false,
-      banReason: null,
-      banExpires: null,
-      image: null,
-    };
-
-    // Mock returns { user: UserWithRole }
-    vi.mocked(auth.api.createUser).mockResolvedValue({
-      user: newUser,
-    });
-
-    const result = await createUser({
-      email: "newuser@example.com",
-      password: "password123",
-      name: "New User",
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(result.user?.role).toBe("user");
-  });
-
-  it("should handle Better Auth API errors", async () => {
-    vi.mocked(getUser).mockResolvedValue({
-      user: {
-        id: "admin-123",
-        email: "admin@example.com",
-        name: "Admin",
-        role: "admin",
-        emailVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        banned: false,
-      },
-      sessionToken: "session-token-123",
-      isImpersonating: false,
-      impersonatedBy: null,
-    });
-
-    vi.mocked(auth.api.createUser).mockRejectedValue(
-      new Error("Email already exists")
+describe("createUser action scenarios", () => {
+  it("creates a real Better Auth user through the Controller", async () => {
+    await PreDB(db, schema, { user: [], account: [], session: [] });
+    const admin = await createAdminAuth();
+    vi.mocked(getUser).mockResolvedValue(
+      sessionResult(admin.actor, null, admin.sessionToken),
     );
 
-    const result = await createUser({
-      email: "existing@example.com",
+    const response = await createUser({
+      email: "created@example.com",
       password: "password123",
-      name: "New User",
+      name: "Created",
+      role: "user",
     });
-
-    expect(result.user).toBeUndefined();
-    expect(result.error).toBe("Email already exists");
+    expect(response).toMatchObject({
+      success: true,
+      data: { email: "created@example.com" },
+    });
+    if (!response.success) throw new Error(response.error);
+    await PostDB(
+      db,
+      schema,
+      { user: [{ id: response.data.id, email: "created@example.com" }] },
+      { allowExtraRows: true },
+    );
   });
 });

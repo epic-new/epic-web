@@ -7,6 +7,11 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { admin } from "better-auth/plugins";
 import { magicLink } from "better-auth/plugins";
+import {
+  BETTER_AUTH_COOKIE_PREFIX,
+  betterAuthCookieNames,
+  readBetterAuthCookie,
+} from "./provider-cookies";
 
 const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:8080";
 
@@ -40,7 +45,7 @@ export const auth = betterAuth({
       expiresIn: 3600,
       sendMagicLink: async () => {},
     }),
-    nextCookies(),
+    ...(process.env.NODE_ENV === "test" ? [] : [nextCookies()]),
   ],
   database: drizzleAdapter(db, {
     provider: "sqlite",
@@ -69,7 +74,7 @@ export const auth = betterAuth({
   ],
   trustedProxyHeaders: true,
   advanced: {
-    cookiePrefix: "sandbox-auth",
+    cookiePrefix: BETTER_AUTH_COOKIE_PREFIX,
     useSecureCookies: isSecureContext,
     ...(isSecureContext && parentDomain
       ? {
@@ -96,12 +101,19 @@ export const auth = betterAuth({
 });
 
 export const getUser = cache(async () => {
+  const requestHeaders = await headers();
   const sessionResponse = await auth.api.getSession({
-    headers: await headers(),
+    headers: requestHeaders,
   });
 
   if (!sessionResponse || !sessionResponse.user) {
-    return { user: null, isImpersonating: false, impersonatedBy: null };
+    return {
+      user: null,
+      sessionToken: null,
+      isImpersonating: false,
+      impersonatedBy: null,
+      impersonationCredential: null,
+    };
   }
 
   // Better Auth getSession returns: { user, session: { id, token, expiresAt, impersonatedBy, ... } }
@@ -119,5 +131,9 @@ export const getUser = cache(async () => {
     sessionToken: sessionResponse.session.token,
     isImpersonating,
     impersonatedBy,
+    impersonationCredential: readBetterAuthCookie(
+      requestHeaders,
+      betterAuthCookieNames.adminSession,
+    ),
   };
 });

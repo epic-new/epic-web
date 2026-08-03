@@ -1,55 +1,28 @@
 import { atom } from "jotai";
+import type {
+  DatabaseColumn,
+  DatabaseSortState,
+  DatabaseTableRow,
+} from "../database.query";
 
-export interface ColumnMetadata {
-  name: string;
-  type: string;
-  isNullable: boolean;
-  isPrimaryKey: boolean;
-  isUnique: boolean;
-}
-
-export interface TableRow extends Record<string, unknown> {
-  _pending?: boolean;
-}
-
-export interface SortState {
-  column: string;
-  direction: "asc" | "desc";
-}
-
-export interface TableState {
-  rows: TableRow[];
-  columns: ColumnMetadata[];
-  total: number;
-  page: number;
-  totalPages: number;
-  isLoading: boolean;
-  error: string | null;
-}
+export type ColumnMetadata = DatabaseColumn;
+export type SortState = DatabaseSortState;
+export type TableRow = DatabaseTableRow;
 
 // Consolidated dialog state
 export type DialogType = "add" | "edit" | "delete" | null;
 
 export interface DialogState {
+  tableName: string | null;
   type: DialogType;
   row: TableRow | null;
   isDuplicate: boolean;
 }
 
-// NOTE: table rows/columns (server state) now live in the TanStack Query
-// cache (see view-table.query.ts). The atoms below are pure UI state.
-
-// Sort state atom
-export const sortAtom = atom<SortState | null>(null);
-
-// Filter state atom
-export const filterAtom = atom<string>("");
-
-// Column visibility atom (column name -> visible)
-export const columnVisibilityAtom = atom<Record<string, boolean>>({});
-
-// Consolidated dialog atom
+// Server state lives in TanStack Query. This shared atom coordinates only the
+// mutually-exclusive add/edit/delete dialogs.
 export const dialogAtom = atom<DialogState>({
+  tableName: null,
   type: null,
   row: null,
   isDuplicate: false,

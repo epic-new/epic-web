@@ -10,11 +10,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useDeleteUser } from "../behaviors/delete-user/use-delete-user";
+import { useDeleteUser } from "../behaviors/delete-user/use-delete-user.hook";
 import { toast } from "sonner";
-import { User } from "../state";
+import type { User } from "../users.query";
 
 interface DeleteUserDialogProps {
+  actorId: string;
   user: User | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,10 +23,11 @@ interface DeleteUserDialogProps {
 
 export function DeleteUserDialog({
   user,
+  actorId,
   open,
   onOpenChange,
 }: DeleteUserDialogProps) {
-  const { handleDeleteUser, isLoading } = useDeleteUser();
+  const { handleDeleteUser, isLoading } = useDeleteUser(actorId);
   
 
   const handleConfirm = async () => {

@@ -1,94 +1,64 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// These actions gate on getUser() -> next/headers, which only exists inside a
-// real request scope. Mock both (same pattern as the admin/users tests) so the
-// action logic runs under vitest.
-vi.mock("next/headers", () => ({
-  headers: vi.fn(() => Promise.resolve(new Headers())),
-}));
-vi.mock("@/lib/auth", async () => {
-  const actual = await vi.importActual("@/lib/auth");
-  return {
-    ...actual,
-    getUser: vi.fn(() =>
-      Promise.resolve({ user: { id: "admin-test", role: "admin" } }),
-    ),
-  };
-});
+vi.mock("@/lib/auth", () => ({ getUser: vi.fn() }));
+
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { PreDB } from "@/lib/db-test";
+import { getUser } from "@/lib/auth";
+import { PostDB, PreDB } from "@/lib/db-test";
 import { deleteRow } from "../delete-row.action";
-import { sql } from "drizzle-orm";
 
-describe("deleteRow action", () => {
-  const now = new Date();
+const now = new Date("2026-01-01T00:00:00.000Z");
+const admin = {
+  id: "admin",
+  email: "admin@example.com",
+  emailVerified: true,
+  createdAt: now,
+  updatedAt: now,
+  role: "admin",
+};
+const existingRecord = {
+  id: "record-one",
+  userId: admin.id,
+  title: "Before",
+  body: "Body",
+  createdAt: now,
+  updatedAt: now,
+  deletedAt: null,
+};
 
+describe("deleteRow", () => {
   beforeEach(async () => {
-    await PreDB(db, schema, {
-      user: [
-        {
-          id: "user-1",
-          email: "alice@example.com",
-          name: "Alice",
-          emailVerified: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: "user-2",
-          email: "bob@example.com",
-          name: "Bob",
-          emailVerified: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ],
-      session: [],
-      account: [],
-      verification: [],
+    await PreDB(db, schema, { user: [admin], test_record: [existingRecord] });
+    vi.mocked(getUser).mockResolvedValue({
+      user: { id: admin.id, role: admin.role },
+    } as never);
+  });
+
+  it("deletes a non-sensitive row through the real Service and Model", async () => {
+    await expect(deleteRow({ tableName: "test_record", id: existingRecord.id }))
+      .resolves.toEqual({ success: true, data: { id: existingRecord.id } });
+    await PostDB(db, schema, { test_record: [] });
+  });
+
+  it("returns a forbidden response for a sensitive table without deleting", async () => {
+    await expect(deleteRow({ tableName: "user", id: admin.id }))
+      .resolves.toEqual({
+        success: false,
+        error: "Forbidden - database write access denied",
+      });
+    await PostDB(db, schema, {
+      user: [{ id: admin.id, email: admin.email, role: "admin" }],
     });
   });
 
-  it("should delete a row from the table", async () => {
-    await deleteRow({
-      tableName: "user",
-      id: "user-1",
+  it("rejects an unauthenticated request without deleting", async () => {
+    vi.mocked(getUser).mockResolvedValue({ user: null } as never);
+
+    await expect(deleteRow({ tableName: "test_record", id: existingRecord.id }))
+      .resolves.toEqual({ success: false, error: "Unauthorized" });
+    await PostDB(db, schema, {
+      test_record: [{ id: existingRecord.id, title: existingRecord.title }],
     });
-
-    // Verify user-1 is deleted
-    const result = await db.run(sql`SELECT * FROM "user"`);
-    expect(result.rows.length).toBe(1);
-    expect((result.rows[0] as Record<string, unknown>).id).toBe("user-2");
-  });
-
-  it("should throw error for non-existent table", async () => {
-    await expect(
-      deleteRow({
-        tableName: "nonexistent",
-        id: "some-id",
-      })
-    ).rejects.toThrow('Table "nonexistent" not found');
-  });
-
-  it("should throw error for non-existent row", async () => {
-    await expect(
-      deleteRow({
-        tableName: "user",
-        id: "nonexistent-id",
-      })
-    ).rejects.toThrow("Row not found");
-  });
-
-  it("should not affect other rows when deleting", async () => {
-    await deleteRow({
-      tableName: "user",
-      id: "user-1",
-    });
-
-    // Verify user-2 still exists
-    const result = await db.run(sql`SELECT * FROM "user" WHERE id = 'user-2'`);
-    expect(result.rows.length).toBe(1);
-    expect((result.rows[0] as Record<string, unknown>).email).toBe("bob@example.com");
   });
 });

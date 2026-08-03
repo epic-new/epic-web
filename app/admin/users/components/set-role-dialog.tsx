@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,28 +17,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSetRole } from "../behaviors/set-role/use-set-role";
+import { useSetRole } from "../behaviors/set-role/use-set-role.hook";
 import { toast } from "sonner";
-import { User } from "../state";
+import type { User } from "../users.query";
 
 interface SetRoleDialogProps {
+  actorId: string;
   user: User | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function SetRoleDialog({ user, open, onOpenChange }: SetRoleDialogProps) {
-  const { handleSetRole, isLoading } = useSetRole();
-  
-
-  const [role, setRole] = useState<"user" | "admin">("user");
-
-  // Update role when user changes
-  useEffect(() => {
-    if (user) {
-      setRole((user.role as "user" | "admin") || "user");
-    }
-  }, [user]);
+export function SetRoleDialog({ actorId, user, open, onOpenChange }: SetRoleDialogProps) {
+  const { handleSetRole, isLoading } = useSetRole(actorId);
+  const [role, setRole] = useState<"user" | "admin">(
+    user?.role === "admin" ? "admin" : "user",
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

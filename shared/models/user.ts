@@ -1,163 +1,156 @@
-import { db } from "@/db";
-import { user, InsertUser, SelectUser } from "@/db/schema";
-import { eq, and, SQL, getTableColumns, isNull, count } from "drizzle-orm";
-import crypto from "crypto";
+import "server-only";
 
-export type User = typeof user.$inferSelect & {};
+import { db, type DatabaseExecutor } from "@/db";
+import { user } from "@/db/schema";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  like,
+  sql,
+  type SQL,
+} from "drizzle-orm";
+
+export type UserRecord = typeof user.$inferSelect;
+export type NewUserRecord = typeof user.$inferInsert;
+
+export type UserSearchField = "email" | "name";
+export type UserSearchOperator = "contains" | "starts_with" | "ends_with";
+export type UserSortField = "email" | "name" | "role" | "createdAt" | "updatedAt";
+
+export interface ListUserRecordsOptions {
+  searchValue?: string;
+  searchField?: UserSearchField;
+  searchOperator?: UserSearchOperator;
+  role?: string;
+  limit: number;
+  offset: number;
+  sortBy?: UserSortField;
+  sortDirection: "asc" | "desc";
+}
+
+export interface UserRecordPage {
+  users: UserRecord[];
+  total: number;
+}
+
+export type UserStats = {
+  totalUsers: number;
+  activeUsers: number;
+  bannedUsers: number;
+};
 
 export class UserModel {
-  id?: string;
-  name?: string | null;
-  email?: string;
-  emailVerified?: boolean;
-  image?: string | null;
-  createdAt?: Date;
-  updatedAt?: Date;
-  role?: string | null;
-  banned?: boolean | null;
-  banReason?: string | null;
-  banExpires?: Date | null;
-
-  constructor() {}
-
-  static async find(id: string): Promise<User | null> {
-    const userData = await db
+  static async find(
+    id: string,
+    executor: DatabaseExecutor = db,
+  ): Promise<UserRecord | null> {
+    const [record] = await executor
       .select()
       .from(user)
       .where(eq(user.id, id))
       .limit(1);
-    if (userData.length === 0) {
-      return null;
-    }
-    return userData[0];
+    return record ?? null;
   }
 
-  static async where(attributes: Partial<SelectUser>): Promise<User[]> {
-    const tableDefinition = user;
-    const columns = getTableColumns(tableDefinition);
-    const conditions: SQL[] = [];
-
-    for (const key in attributes) {
-      if (Object.prototype.hasOwnProperty.call(attributes, key)) {
-        const attributeKey = key as keyof SelectUser;
-        const columnKey = key as keyof typeof columns;
-        const attributeValue = attributes[attributeKey];
-
-        if (columns[columnKey]) {
-          if (attributeValue === null) {
-            conditions.push(isNull(columns[columnKey]));
-          } else if (attributeValue !== undefined) {
-            conditions.push(eq(columns[columnKey], attributeValue));
-          }
-        }
-      }
-    }
-
-    let query;
-    if (conditions.length > 0) {
-      query = db
-        .select()
-        .from(tableDefinition)
-        .where(and(...conditions));
-    } else {
-      query = db.select().from(tableDefinition);
-    }
-
-    const userData = await query;
-    return userData.map((u) => u);
-  }
-
-  async save(): Promise<User> {
-    if (this.id) {
-      // Update existing user
-      const now = new Date();
-      const updatedUsers = await db
-        .update(user)
-        .set({ name: this.name, email: this.email, updatedAt: now })
-        .where(eq(user.id, this.id))
-        .returning();
-      if (updatedUsers.length === 0) {
-        throw new Error("User not found for update");
-      }
-      const updatedData = updatedUsers[0];
-      this.name = updatedData.name;
-      this.email = updatedData.email;
-      this.updatedAt = updatedData.updatedAt;
-      // this.createdAt remains unchanged on update
-    } else {
-      // Validate required fields
-      if (!this.email) {
-        throw new Error("Email is required");
-      }
-
-      // Create new user
-      const newId = this.id || crypto.randomUUID();
-      const now = new Date();
-
-      const insertData: InsertUser = {
-        id: newId,
-        name: this.name || null,
-        email: this.email,
-        emailVerified: false, // Default value
-        createdAt: now, // Set createdAt
-        updatedAt: now, // Set updatedAt
-      };
-
-      const newUsers = await db.insert(user).values(insertData).returning();
-      if (newUsers.length === 0) {
-        throw new Error("Failed to create user");
-      }
-      const newUser = newUsers[0];
-      this.id = newUser.id;
-      this.name = newUser.name;
-      this.email = newUser.email;
-      this.createdAt = newUser.createdAt;
-      this.updatedAt = newUser.updatedAt;
-    }
-    return this as unknown as User;
-  }
-
-  static async count(attributes?: Partial<SelectUser>): Promise<number> {
-    if (!attributes || Object.keys(attributes).length === 0) {
-      const result = await db.select({ count: count() }).from(user);
-      return result[0].count;
-    }
-
-    const columns = getTableColumns(user);
-    const conditions: SQL[] = [];
-
-    for (const key in attributes) {
-      if (Object.prototype.hasOwnProperty.call(attributes, key)) {
-        const attributeKey = key as keyof SelectUser;
-        const columnKey = key as keyof typeof columns;
-        const attributeValue = attributes[attributeKey];
-
-        if (columns[columnKey]) {
-          if (attributeValue === null) {
-            conditions.push(isNull(columns[columnKey]));
-          } else if (attributeValue !== undefined) {
-            conditions.push(eq(columns[columnKey], attributeValue));
-          }
-        }
-      }
-    }
-
-    const result = await db
-      .select({ count: count() })
+  static async findByEmail(email: string): Promise<UserRecord | null> {
+    const [record] = await db
+      .select()
       .from(user)
-      .where(and(...conditions));
-    return result[0].count;
+      .where(eq(user.email, email))
+      .limit(1);
+    return record ?? null;
   }
 
-  static async stats(): Promise<{
-    totalUsers: number;
-    activeUsers: number;
-    bannedUsers: number;
-  }> {
-    const [totalUsers, bannedUsers] = await Promise.all([
-      UserModel.count(),
-      UserModel.count({ banned: true }),
+  static async findFirstByRole(role: string): Promise<UserRecord | null> {
+    const [record] = await db
+      .select()
+      .from(user)
+      .where(eq(user.role, role))
+      .limit(1);
+
+    return record ?? null;
+  }
+
+  static async list(options: ListUserRecordsOptions): Promise<UserRecordPage> {
+    const conditions: SQL[] = [];
+
+    if (options.searchValue) {
+      const column = options.searchField === "name" ? user.name : user.email;
+      const pattern =
+        options.searchOperator === "starts_with"
+          ? `${options.searchValue}%`
+          : options.searchOperator === "ends_with"
+            ? `%${options.searchValue}`
+            : `%${options.searchValue}%`;
+      conditions.push(like(column, pattern));
+    }
+
+    if (options.role) conditions.push(eq(user.role, options.role));
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    const sortColumns = {
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    } as const;
+    const sortColumn = sortColumns[options.sortBy ?? "createdAt"];
+    const order = options.sortDirection === "desc" ? desc(sortColumn) : asc(sortColumn);
+
+    const [users, [totalResult]] = await Promise.all([
+      db
+        .select()
+        .from(user)
+        .where(where)
+        .orderBy(order)
+        .limit(options.limit)
+        .offset(options.offset),
+      db.select({ value: count() }).from(user).where(where),
     ]);
+
+    return { users, total: totalResult?.value ?? 0 };
+  }
+
+  static async update(
+    id: string,
+    changes: Partial<
+      Pick<
+        UserRecord,
+        "email" | "name" | "role" | "banned" | "banReason" | "banExpires"
+      >
+    >,
+    executor: DatabaseExecutor = db,
+  ): Promise<UserRecord | null> {
+    const [record] = await executor
+      .update(user)
+      .set({ ...changes, updatedAt: new Date() })
+      .where(eq(user.id, id))
+      .returning();
+    return record ?? null;
+  }
+
+  static async delete(id: string): Promise<boolean> {
+    const [record] = await db
+      .delete(user)
+      .where(eq(user.id, id))
+      .returning({ id: user.id });
+    return !!record;
+  }
+
+  static async getStats(): Promise<UserStats> {
+    const [result] = await db
+      .select({
+        totalUsers: count(),
+        bannedUsers: sql<number>`count(case when ${user.banned} = 1 then 1 end)`.mapWith(Number),
+      })
+      .from(user);
+
+    const totalUsers = result.totalUsers;
+    const bannedUsers = result.bannedUsers;
 
     return {
       totalUsers,
@@ -165,54 +158,4 @@ export class UserModel {
       bannedUsers,
     };
   }
-
-  async update(
-    attributes: Partial<Pick<SelectUser, "name" | "email">>
-  ): Promise<User> {
-    if (!this.id) {
-      throw new Error(
-        "Cannot update a user that has not been saved. Call save() first for new users."
-      );
-    }
-
-    const setData: Partial<Pick<InsertUser, "name" | "email" | "updatedAt">> =
-      {};
-
-    if (attributes.name !== undefined) {
-      setData.name = attributes.name;
-    }
-    if (attributes.email !== undefined) {
-      setData.email = attributes.email;
-    }
-
-    if (Object.keys(setData).length === 0) {
-      // No attributes to update
-      return this as unknown as User;
-    }
-
-    setData.updatedAt = new Date();
-
-    const updatedUsers = await db
-      .update(user)
-      .set(setData)
-      .where(eq(user.id, this.id))
-      .returning();
-
-    if (updatedUsers.length === 0) {
-      // This case should ideally not be reached if `this.id` is valid and record exists
-      throw new Error("User not found for update, or update failed.");
-    }
-
-    const updatedDbData = updatedUsers[0];
-
-    // Update instance properties from the returned data
-    if (updatedDbData.name !== undefined) this.name = updatedDbData.name;
-    if (updatedDbData.email) this.email = updatedDbData.email;
-    if (updatedDbData.updatedAt) this.updatedAt = updatedDbData.updatedAt;
-    // Note: `this.createdAt` should remain unchanged.
-
-    return this as unknown as User;
-  }
 }
-
-export default User;

@@ -1,34 +1,5 @@
 import { atom } from "jotai";
 
-// User type from Better Auth
-export interface User {
-  id: string;
-  email: string;
-  name: string | null;
-  role: string | null;
-  banned: boolean | null;
-  banReason: string | null;
-  banExpires: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  emailVerified: boolean;
-  image: string | null;
-  pending?: boolean; // For optimistic updates
-}
-
-// Session type from Better Auth
-export interface Session {
-  id: string;
-  userId: string;
-  token: string;
-  ipAddress: string | null;
-  userAgent: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  expiresAt: Date;
-  impersonatedBy: string | null;
-}
-
 // --- UI state (Jotai) ---
 // Server state (the users list and a user's sessions) lives in the TanStack
 // Query cache. The atoms below are pure UI state that drive the query keys
@@ -45,7 +16,3 @@ export const usersRoleFilterAtom = atom<string | undefined>(undefined);
 // Sort state
 export const usersSortByAtom = atom<string | undefined>(undefined);
 export const usersSortDirectionAtom = atom<"asc" | "desc">("asc");
-
-// Impersonation state
-export const isImpersonatingAtom = atom(false);
-export const impersonatedUserAtom = atom<User | null>(null);

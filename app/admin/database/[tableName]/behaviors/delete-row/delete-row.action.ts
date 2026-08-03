@@ -1,51 +1,41 @@
 "use server";
 
-import { z } from "zod";
-import { db } from "@/db";
-import { sql } from "drizzle-orm";
 import { getUser } from "@/lib/auth";
+import type { ActionResponse } from "@/shared/actions/action-response";
+import { z } from "zod";
 import {
-  getTableByName,
-  getTableMetadata,
-} from "../../../lib/schema-introspection";
+  DeleteRow,
+  type DeleteRowInput,
+  type DeleteRowResult,
+} from "./delete-row.service";
 
-const inputSchema = z.object({
-  tableName: z.string(),
-  id: z.union([z.string(), z.number()]),
-});
+export type { DeleteRowInput, DeleteRowResult } from "./delete-row.service";
 
-export type DeleteRowInput = z.infer<typeof inputSchema>;
+export async function deleteRow(
+  input: DeleteRowInput,
+): Promise<ActionResponse<DeleteRowResult>> {
+  try {
+    const { user } = await getUser();
+    if (!user) return { success: false, error: "Unauthorized" };
 
-export async function deleteRow(input: unknown): Promise<void> {
-  const { user } = await getUser();
-  if (!user) throw new Error("Unauthorized - please sign in");
-  if (user.role !== "admin") throw new Error("Forbidden - admin role required");
-
-  const { tableName, id } = inputSchema.parse(input);
-
-  // Validate table exists
-  const tableObj = getTableByName(tableName);
-  if (!tableObj) {
-    throw new Error(`Table "${tableName}" not found`);
+    return {
+      success: true,
+      data: await DeleteRow.execute({
+        actor: { id: user.id, role: user.role },
+        input,
+      }),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: actionError(error, "Unable to delete row"),
+    };
   }
+}
 
-  const metadata = getTableMetadata(tableName);
-  if (!metadata) {
-    throw new Error(`Could not get metadata for table "${tableName}"`);
+function actionError(error: unknown, fallback: string): string {
+  if (error instanceof z.ZodError) {
+    return error.issues[0]?.message ?? fallback;
   }
-
-  // Find primary key column
-  const pkColumn = metadata.columns.find((col) => col.isPrimaryKey);
-  if (!pkColumn) {
-    throw new Error(`No primary key found for table "${tableName}"`);
-  }
-
-  // Build DELETE query
-  const deleteQuery = sql`DELETE FROM ${sql.raw(`"${tableName}"`)} WHERE ${sql.raw(`"${pkColumn.name}"`)} = ${id}`;
-
-  const result = await db.run(deleteQuery);
-
-  if (result.rowsAffected === 0) {
-    throw new Error("Row not found");
-  }
+  return error instanceof Error ? error.message : fallback;
 }

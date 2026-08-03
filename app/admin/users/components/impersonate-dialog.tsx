@@ -10,9 +10,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useImpersonateUser } from "../behaviors/impersonate-user/use-impersonate-user";
+import { useImpersonateUser } from "../behaviors/impersonate-user/use-impersonate-user.hook";
 import { toast } from "sonner";
-import { User } from "../state";
+import type { User } from "../users.query";
 
 interface ImpersonateDialogProps {
   user: User | null;

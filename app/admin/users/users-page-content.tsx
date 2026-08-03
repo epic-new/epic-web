@@ -11,14 +11,14 @@ import { SetRoleDialog } from "./components/set-role-dialog";
 import { SetPasswordDialog } from "./components/set-password-dialog";
 import { SessionsDialog } from "./components/sessions-dialog";
 import { ImpersonateDialog } from "./components/impersonate-dialog";
-import { useListUsers } from "./behaviors/list-users/use-list-users";
+import { useListUsers } from "./behaviors/list-users/use-list-users.hook";
 import { AdminHeader } from "../components/admin-header";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { User } from "./state";
+import type { User } from "./users.query";
 
-export function UsersPageContent() {
-  const { error } = useListUsers();
+export function UsersPageContent({ actorId }: { actorId: string }) {
+  const { error } = useListUsers(actorId);
 
   // Dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -93,10 +93,11 @@ export function UsersPageContent() {
         )}
 
         {/* Toolbar */}
-        <UsersTableToolbar />
+        <UsersTableToolbar actorId={actorId} />
 
         {/* Data table */}
         <UsersDataTable
+          actorId={actorId}
           onEditUser={handleEditUser}
           onResetPassword={handleResetPassword}
           onChangeRole={handleChangeRole}
@@ -109,25 +110,32 @@ export function UsersPageContent() {
 
       {/* Dialogs */}
       <CreateUserDialog
+        actorId={actorId}
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
       />
       <UpdateUserDialog
+        key={`${selectedUser?.id ?? "none"}-${updateDialogOpen}`}
+        actorId={actorId}
         user={selectedUser}
         open={updateDialogOpen}
         onOpenChange={setUpdateDialogOpen}
       />
       <DeleteUserDialog
+        actorId={actorId}
         user={selectedUser}
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
       />
       <BanUserDialog
+        actorId={actorId}
         user={selectedUser}
         open={banDialogOpen}
         onOpenChange={setBanDialogOpen}
       />
       <SetRoleDialog
+        key={`${selectedUser?.id ?? "none"}-${roleDialogOpen}`}
+        actorId={actorId}
         user={selectedUser}
         open={roleDialogOpen}
         onOpenChange={setRoleDialogOpen}
@@ -138,6 +146,7 @@ export function UsersPageContent() {
         onOpenChange={setPasswordDialogOpen}
       />
       <SessionsDialog
+        actorId={actorId}
         user={selectedUser}
         open={sessionsDialogOpen}
         onOpenChange={setSessionsDialogOpen}
