@@ -13,7 +13,6 @@
       "WebFetch",
       "WebFetch(domain:*)",
       "WebSearch",
-      "mcp__playwright",
       "mcp__next-devtools",
       "mcp__figma-dev-mode"
     ],

@@ -11,13 +11,13 @@ const users = sqliteTable("users", {
   name: text("name").notNull(),
 });
 
-const posts = sqliteTable("posts", {
+const records = sqliteTable("records", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("user_id").notNull(),
-  title: text("title").notNull(),
+  label: text("label").notNull(),
 });
 
-const schema = { users, posts };
+const schema = { users, records };
 
 describe("PreDB", () => {
   const client = createClient({
@@ -35,10 +35,10 @@ describe("PreDB", () => {
     `);
 
     await db.run(sql`
-      CREATE TABLE posts (
+      CREATE TABLE records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
+        label TEXT NOT NULL,
         FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
@@ -46,22 +46,22 @@ describe("PreDB", () => {
 
   beforeEach(async () => {
     // Clean up tables before each test
-    await db.run(sql`DELETE FROM posts`);
+    await db.run(sql`DELETE FROM records`);
     await db.run(sql`DELETE FROM users`);
-    await db.run(sql`DELETE FROM sqlite_sequence WHERE name IN ('users', 'posts')`);
+    await db.run(sql`DELETE FROM sqlite_sequence WHERE name IN ('users', 'records')`);
   });
 
   it("wipes, resets sequences, and inserts rows declaratively", async () => {
     // First add some junk data with explicit IDs
     await db.insert(users).values({ id: 999, name: 'junk' });
-    await db.insert(posts).values({ id: 999, userId: 999, title: 'junk' });
+    await db.insert(records).values({ id: 999, userId: 999, label: 'junk' });
 
     const state = {
       users: [
         { id: 1, name: "Ed" },
         { id: 2, name: "Luiz" }
       ],
-      posts: [{ id: 10, userId: 1, title: "Hello" }]
+      records: [{ id: 10, userId: 1, label: "Hello" }]
     };
 
     await PreDB(db, schema, state);
@@ -72,21 +72,21 @@ describe("PreDB", () => {
       { id: 2, name: "Luiz" }
     ]);
 
-    const postsNow = await db.select({ id: posts.id, user_id: posts.userId, title: posts.title }).from(posts);
-    expect(postsNow).toEqual([{ id: 10, user_id: 1, title: "Hello" }]);
+    const recordsNow = await db.select({ id: records.id, user_id: records.userId, label: records.label }).from(records);
+    expect(recordsNow).toEqual([{ id: 10, user_id: 1, label: "Hello" }]);
   });
 
   it("respects the 'wipe' option when false", async () => {
     // Set initial state
     await PreDB(db, schema, {
       users: [{ id: 1, name: "Initial" }],
-      posts: []
+      records: []
     });
 
     // Add more data without wiping
     await PreDB(db, schema, {
       users: [{ id: 2, name: "Added" }],
-      posts: []
+      records: []
     }, { wipe: false });
 
     const usersNow = await db.select().from(users).orderBy(users.id);
@@ -100,7 +100,7 @@ describe("PreDB", () => {
     // Set initial state in both tables
     await PreDB(db, schema, {
       users: [{ id: 1, name: "User1" }],
-      posts: [{ id: 1, userId: 1, title: "Post1" }]
+      records: [{ id: 1, userId: 1, label: "Record1" }]
     });
 
     // Only wipe and reset users table
@@ -111,9 +111,9 @@ describe("PreDB", () => {
     const usersNow = await db.select().from(users).orderBy(users.id);
     expect(usersNow).toEqual([{ id: 2, name: "User2" }]);
 
-    // Posts should remain unchanged
-    const postsNow = await db.select({ id: posts.id, user_id: posts.userId, title: posts.title }).from(posts);
-    expect(postsNow).toEqual([{ id: 1, user_id: 1, title: "Post1" }]);
+    // Records should remain unchanged
+    const recordsNow = await db.select({ id: records.id, user_id: records.userId, label: records.label }).from(records);
+    expect(recordsNow).toEqual([{ id: 1, user_id: 1, label: "Record1" }]);
   });
 
   it("throws an error for non-existent table", async () => {
@@ -129,18 +129,18 @@ describe("PreDB", () => {
   it("handles empty state objects", async () => {
     // Add some data first with specific IDs (use unique IDs to avoid conflicts)
     await db.insert(users).values({ id: 500, name: 'ToBeDeleted' });
-    await db.insert(posts).values({ id: 500, userId: 500, title: 'ToBeDeleted' });
+    await db.insert(records).values({ id: 500, userId: 500, label: 'ToBeDeleted' });
 
     // Clear all targeted tables
     await PreDB(db, schema, {
       users: [],
-      posts: []
+      records: []
     });
 
     const usersNow = await db.select().from(users);
     expect(usersNow).toEqual([]);
 
-    const postsNow = await db.select().from(posts);
-    expect(postsNow).toEqual([]);
+    const recordsNow = await db.select().from(records);
+    expect(recordsNow).toEqual([]);
   });
 });

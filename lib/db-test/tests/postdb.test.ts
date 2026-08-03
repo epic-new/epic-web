@@ -11,13 +11,13 @@ const users = sqliteTable("users", {
   name: text("name").notNull(),
 });
 
-const posts = sqliteTable("posts", {
+const records = sqliteTable("records", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("user_id").notNull(),
-  title: text("title").notNull(),
+  label: text("label").notNull(),
 });
 
-const schema = { users, posts };
+const schema = { users, records };
 
 describe("PostDB", () => {
   const client = createClient({ url: ":memory:" });
@@ -33,10 +33,10 @@ describe("PostDB", () => {
     `);
 
     await db.run(sql`
-      CREATE TABLE posts (
+      CREATE TABLE records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
+        label TEXT NOT NULL,
         FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
@@ -46,8 +46,8 @@ describe("PostDB", () => {
       { id: 1, name: "Ed" },
       { id: 2, name: "Luiz" }
     ]);
-    await db.insert(posts).values([
-      { id: 10, userId: 1, title: "Hello world" }
+    await db.insert(records).values([
+      { id: 10, userId: 1, label: "First record" }
     ]);
   });
 
@@ -55,7 +55,7 @@ describe("PostDB", () => {
     await expect(
       PostDB(db, schema, {
         users: [{ id: 2, name: "Luiz" }, { id: 1, name: "Ed" }], // Different order
-        posts: [{ id: 10, userId: 1, title: "Hello world" }],
+        records: [{ id: 10, userId: 1, label: "First record" }],
       })
     ).resolves.toBe(true);
   });
@@ -63,7 +63,7 @@ describe("PostDB", () => {
   it("throws with readable diff when mismatched", async () => {
     await expect(
       PostDB(db, schema, {
-        posts: [{ id: 10, userId: 1, title: "Goodbye" }], // Wrong title
+        records: [{ id: 10, userId: 1, label: "Different record" }], // Wrong label
       })
     ).rejects.toThrow(/PostDB assertion failed:/);
   });
@@ -71,7 +71,7 @@ describe("PostDB", () => {
   it("supports subset assertions (partial columns)", async () => {
     await expect(
       PostDB(db, schema, {
-        posts: [{ id: 10, userId: 1 }], // Omit 'title' column
+        records: [{ id: 10, userId: 1 }], // Omit 'label' column
       })
     ).resolves.toBe(true);
   });
@@ -96,7 +96,7 @@ describe("PostDB", () => {
     await expect(
       PostDB(db, schema, {
         users: [{ id: 1, name: "Ed" }, { id: 2, name: "Luiz" }],
-        posts: [] // This would fail if checked, but we only check users
+        records: [] // This would fail if checked, but we only check users
       }, { only: ["users"] })
     ).resolves.toBe(true);
   });
@@ -114,7 +114,7 @@ describe("PostDB", () => {
     await expect(
       PostDB(db, schema, {
         users: [],
-        posts: []
+        records: []
       })
     ).rejects.toThrow(/PostDB assertion failed:/);
   });

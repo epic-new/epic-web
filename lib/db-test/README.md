@@ -18,8 +18,8 @@ await PreDB(db, schema, {
     { id: 1, name: 'Alice', email: 'alice@example.com' },
     { id: 2, name: 'Bob', email: 'bob@example.com' }
   ],
-  posts: [
-    { id: 1, userId: 1, title: 'First Post' }
+  records: [
+    { id: 1, userId: 1, label: 'First record' }
   ]
 });
 ```

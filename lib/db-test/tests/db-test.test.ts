@@ -12,13 +12,13 @@ const users = sqliteTable("users", {
   name: text("name").notNull(),
 });
 
-const posts = sqliteTable("posts", {
+const records = sqliteTable("records", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   userId: integer("user_id").notNull(),
-  title: text("title").notNull(),
+  label: text("label").notNull(),
 });
 
-const schema = { users, posts };
+const schema = { users, records };
 
 describe("PreDB + PostDB Integration", () => {
   const client = createClient({ url: ":memory:" });
@@ -34,10 +34,10 @@ describe("PreDB + PostDB Integration", () => {
     `);
 
     await db.run(sql`
-      CREATE TABLE posts (
+      CREATE TABLE records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        title TEXT NOT NULL,
+        label TEXT NOT NULL,
         FOREIGN KEY(user_id) REFERENCES users(id)
       )
     `);
@@ -45,34 +45,34 @@ describe("PreDB + PostDB Integration", () => {
 
   beforeEach(async () => {
     // Clean up tables before each test
-    await db.run(sql`DELETE FROM posts`);
+    await db.run(sql`DELETE FROM records`);
     await db.run(sql`DELETE FROM users`);
-    await db.run(sql`DELETE FROM sqlite_sequence WHERE name IN ('users', 'posts')`);
+    await db.run(sql`DELETE FROM sqlite_sequence WHERE name IN ('users', 'records')`);
   });
 
   it("works together for deterministic testing workflow", async () => {
     // 1. Set up initial state with PreDB
     await PreDB(db, schema, {
       users: [{ id: 1, name: "Ed" }],
-      posts: []
+      records: []
     });
 
     // 2. Verify initial state with PostDB
     await expect(
       PostDB(db, schema, {
         users: [{ id: 1, name: "Ed" }],
-        posts: []
+        records: []
       })
     ).resolves.toBe(true);
 
-    // 3. Simulate creating a post (manual insert for this test)
-    await db.insert(posts).values({ id: 10, userId: 1, title: "Hello world" });
+    // 3. Simulate creating a record (manual insert for this test)
+    await db.insert(records).values({ id: 10, userId: 1, label: "First record" });
 
     // 4. Assert the final state with PostDB
     await expect(
       PostDB(db, schema, {
         users: [{ id: 1, name: "Ed" }],
-        posts: [{ id: 10, userId: 1, title: "Hello world" }]
+        records: [{ id: 10, userId: 1, label: "First record" }]
       })
     ).resolves.toBe(true);
   });
@@ -81,13 +81,13 @@ describe("PreDB + PostDB Integration", () => {
     // Set up state with all columns
     await PreDB(db, schema, {
       users: [{ id: 1, name: "Ed" }, { id: 2, name: "Luiz" }],
-      posts: [{ id: 20, userId: 1, title: "First post" }, { id: 21, userId: 2, title: "Second post" }]
+      records: [{ id: 20, userId: 1, label: "First record" }, { id: 21, userId: 2, label: "Second record" }]
     });
 
-    // Assert with subset (only checking id and userId, ignoring title)
+    // Assert with subset (only checking id and userId, ignoring label)
     await expect(
       PostDB(db, schema, {
-        posts: [{ id: 20, userId: 1 }, { id: 21, userId: 2 }]
+        records: [{ id: 20, userId: 1 }, { id: 21, userId: 2 }]
       })
     ).resolves.toBe(true);
   });
@@ -96,23 +96,23 @@ describe("PreDB + PostDB Integration", () => {
     // Set up initial state
     await PreDB(db, schema, {
       users: [{ id: 1, name: "Ed" }],
-      posts: [{ id: 30, userId: 1, title: "Original title" }]
+      records: [{ id: 30, userId: 1, label: "Original label" }]
     });
 
-    // Simulate updating the post title
-    await db.run(sql`UPDATE posts SET title = 'Updated title' WHERE id = 30`);
+    // Simulate updating the record label
+    await db.run(sql`UPDATE records SET label = 'Updated label' WHERE id = 30`);
 
     // PostDB should detect the change
     await expect(
       PostDB(db, schema, {
-        posts: [{ id: 30, userId: 1, title: "Original title" }] // This should fail
+        records: [{ id: 30, userId: 1, label: "Original label" }] // This should fail
       })
     ).rejects.toThrow(/PostDB assertion failed:/);
 
-    // But should pass with the correct new title
+    // But should pass with the correct new label
     await expect(
       PostDB(db, schema, {
-        posts: [{ id: 30, userId: 1, title: "Updated title" }]
+        records: [{ id: 30, userId: 1, label: "Updated label" }]
       })
     ).resolves.toBe(true);
   });

@@ -7,7 +7,12 @@ export default defineConfig({
   plugins: [tsconfigPaths(), react()],
   resolve: {
     alias: {
+      "@/db/schema": path.resolve(
+        __dirname,
+        "app/admin/database/tests/database-schema.ts",
+      ),
       "@": path.resolve(__dirname, "./"),
+      "server-only": path.resolve(__dirname, "node_modules/server-only/empty.js"),
     },
   },
   test: {
@@ -24,11 +29,10 @@ export default defineConfig({
     ],
     exclude: [
       "**/node_modules/**",
+      "**/.worktrees/**",
       "**/dist/**",
       "**/.next/**",
-      "**/playwright-report/**",
       "**/test-results/**",
-      "**/lib/b-test/tests/**", // Exclude Playwright-based tests (use spec tests instead)
     ],
   },
 });

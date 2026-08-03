@@ -3,7 +3,6 @@ logs/
 *.log
 
 # Test files
-playwright-report/
 test-results/
 coverage/
 
@@ -22,4 +21,3 @@ db/databases/development.db
 # OS files
 .DS_Store
 Thumbs.db
-

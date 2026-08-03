@@ -14,6 +14,12 @@ if (process.env.NODE_ENV === 'development') {
   dotenv.config({ path: '.env.production', override: true, quiet: true });
 }
 
+if (process.env.NODE_ENV === 'test' && process.env.DATABASE_URL !== ':memory:') {
+  throw new Error(
+    'Refusing to initialize tests with a non-memory DATABASE_URL',
+  );
+}
+
 // Reuse DB instance to avoid too many connections in dev HMR
 declare global {
   var db: LibSQLDatabase<typeof schema> | undefined;
@@ -26,8 +32,15 @@ function createDbInstance() {
     throw new Error("DATABASE_URL environment variable is not set");
   }
 
+  // LibSQL opens a new connection after a transaction. A plain `:memory:` URL
+  // would therefore point that connection at a fresh, empty database. Shared
+  // cache keeps every connection in this test process on the same in-memory DB.
+  const clientUrl = process.env.NODE_ENV === "test" && url === ":memory:"
+    ? "file::memory:?cache=shared"
+    : url;
+
   const client = createClient({
-    url,
+    url: clientUrl,
     authToken: process.env.TURSO_DATABASE_TOKEN,
   });
 
@@ -37,3 +50,14 @@ function createDbInstance() {
 const dbInstance = global.db ?? (global.db = createDbInstance());
 
 export const db = dbInstance;
+
+export type DatabaseExecutor = Pick<
+  typeof db,
+  "select" | "insert" | "update" | "delete"
+>;
+
+export function withTransaction<T>(
+  operation: (executor: DatabaseExecutor) => Promise<T>,
+): Promise<T> {
+  return db.transaction((transaction) => operation(transaction));
+}

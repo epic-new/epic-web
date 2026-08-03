@@ -9,11 +9,11 @@
       "name": "AlsoFromFile"
     }
   ],
-  "posts": [
+  "records": [
     {
       "id": 200,
       "user_id": 100,
-      "title": "FilePost"
+      "label": "FileRecord"
     }
   ]
 }
