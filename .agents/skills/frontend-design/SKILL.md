@@ -1,12 +1,29 @@
 ---
 name: frontend-design
-description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
-license: Complete terms in LICENSE.txt
+description: Create distinctive, production-grade frontend interfaces with high design quality while preserving the repository's component, Hook, query, hydration, and design-system architecture. Use when the user asks to build or style web components, pages, dashboards, React interfaces, or other web UI.
 ---
 
 This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.
 
 The user provides frontend requirements: a component, page, application, or interface to build. They may include context about the purpose, audience, or technical constraints.
+
+## Architecture First
+
+Before editing UI, read `docs/DESIGN.md`, the sources it names, and
+`.agents/skills/components/SKILL.md`. The components skill is authoritative for
+file naming, Server Component prefetch/hydration, component reuse, hook-only
+behavior access, state ownership, and tests. Aesthetic direction never overrides
+those constraints.
+
+- Use the project's Next.js, React, Tailwind, and shadcn/ui stack.
+- Reuse the component inventory before creating a component; add new shared
+  components to the styleguide.
+- Components render and consume public Hooks. They never call Actions, Services,
+  Models, Drizzle, or Integrations.
+- TanStack Query owns server state; Jotai owns UI state only.
+- Pages that render initial reads prefetch the page query and hydrate a client
+  content component. Authenticated user-owned keys include actor identity.
+- Use semantic tokens from `app/globals.css`; never hardcode UI colors.
 
 ## Design Thinking
 
@@ -22,7 +39,7 @@ Before coding, understand the context and commit to a BOLD aesthetic direction:
 
 This project uses **shadcn/ui** components with **Tailwind CSS**. Always use the existing color tokens defined in `app/globals.css` (e.g., `bg-primary`, `text-muted-foreground`, `border-border`). Never hardcode colors — rely on the CSS variables from the theme so components stay consistent with the design system.
 
-Then implement working code (HTML/CSS/JS, React, Vue, etc.) that is:
+Then implement working Next.js/React code that is:
 - Production-grade and functional
 - Visually striking and memorable
 - Cohesive with a clear aesthetic point-of-view
@@ -43,4 +60,5 @@ Interpret creatively and make unexpected choices that feel genuinely designed fo
 
 **IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
 
-Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+Commit fully to a distinctive vision while keeping the implementation accessible,
+maintainable, and faithful to the repository architecture.

@@ -1,31 +1,29 @@
 # [Issue title]
 
-Brief overview of what this issue accomplishes.
+[Brief overview of what this issue accomplishes.]
 
 # Functional Specification
 
 ## Behavior: [Name]
 
 [One paragraph describing the behavior in user-facing terms.]
-Directory: `app/[role]/[page]/behaviors/[behavior-name]/`
+Directory: `app/[page]/behaviors/[behavior-name]/`
 
 ### Rules
 
 #### [Rule Name]
 - When:
   - [Condition]
-  - [Condition]
 - Then:
-  - [Outcome]
-  - [Outcome]
+  - [Observable outcome]
 
 #### [Rule Name]
 - When:
   - [Condition]
 - Then:
-  - [Outcome]
+  - [Observable outcome]
 
-### Examples
+### Scenarios
 
 #### [Primary Use Case]
 
@@ -34,127 +32,249 @@ Directory: `app/[role]/[page]/behaviors/[behavior-name]/`
 col_a, col_b, col_c
 1, foo, bar
 
-[table-name]:
-col_a, col_b
-1, baz
-
 ##### Steps
-* Act: [User or system performs an action that changes state]
-* Act: [Another action]
-* Check: [Observable result in UI / API response]
-* Check: [Observable result in database / derived state]
+* Act: [User or system performs an action]
+* Check: [Observable UI or response outcome]
+* Check: [Observable persistence outcome]
 
 ##### PostDB
 [table-name]:
 col_a, col_b, col_c
-1, foo, bar
-2, new, row
+1, changed, value
 
-#### [Edge Case or Alternative Flow]
+#### [Meaningful Failure]
 
 ##### PreDB
 [Optional CSV tables as needed]
 
 ##### Steps
-* Act: [Trigger the edge case]
-* Check: Error "[expected message]" is shown
-* Check: No new records are created
+* Act: [Trigger the failure]
+* Check: Error "[message]" is shown or returned
+* Check: Persistence remains unchanged
+
+##### PostDB
+[Expected unchanged tables]
 
 # Technical Specification
 
-## Action: [actionName](input: InputType): Promise<ResultType>
+Include only the technical units required by this Behavior. Technical scenarios
+belong under the unit whose public contract they verify.
 
-File: `[behavior-path]/[action-name].action.ts`
+## Model: [Resource]Model
 
-[Single sentence describing what this action does and when it's called]
+File: `shared/models/[resource].ts`
 
-- Given: [input parameters and assumptions]
-- Returns: [value or outcome returned]
-- Calls: [direct dependencies - Models, Integrations]
+[Static, table-oriented persistence API used by Services.]
 
-### Example: [Primary Use Case]
+### Records
+- [Resource]Record: `typeof [table].$inferSelect`
+- New[Resource]Record: `typeof [table].$inferInsert`
 
-#### PreDB
-[table_name]:
-column1, column2, column3
-value1, value2, value3
+### Methods
+- [method](parameters, transaction?): Promise<[Resource]Record>
 
-#### Steps
-* Call: [actionName]({ field1: "value", field2: 123 }) as user 1
-* Returns: { id: 1, field1: "value", status: "created" }
+### Scenarios
 
-#### PostDB
-[table_name]:
-column1, column2, column3, column4
-value1, value2, value3, newval
+#### Scenario: [Persistence contract]
 
-### Example: [Error Case]
+##### PreDB
+[table]:
+[state]
 
-#### PreDB
-[table_name]:
-column1, column2
-value1, value2
+##### Steps
+* Call: [Resource]Model.[method](...)
+* Returns: [expected plain record]
 
-#### Steps
-* Call: [actionName]({ field1: "invalid" }) as user 1
-* Throws: "[Expected error message]"
-
-#### PostDB
-[table_name]:
-column1, column2
-value1, value2
+##### PostDB
+[table]:
+[expected state]
 
 ---
 
-## Hook: use[BehaviorName]()
+## Policy: [Resource]Policy
 
-File: `[behavior-path]/use-[behavior-name].ts`
+File: `[scope]/[resource].policy.ts`
 
-Entry point for the [Behavior Name] behavior. [What it validates, updates, and calls.]
+[Pure authorization decisions over an actor and the records involved.]
+
+### Methods
+- [operation](actor: Actor, records: readonly [Resource]Record[]): boolean
+
+### Scenarios
+
+#### Scenario: [Authorized actor]
+
+##### Steps
+* Call: [Resource]Policy.[operation](actor, records)
+* Returns: true
+
+#### Scenario: [Unauthorized actor]
+
+##### Steps
+* Call: [Resource]Policy.[operation](otherActor, records)
+* Returns: false
+
+---
+
+## Service: [BehaviorName].execute(command: CommandType): Promise<ResultType>
+
+File: `[behavior-path]/[behavior-name].service.ts`
+
+[Authoritative validation, authorization, business rules, sequencing, and
+transaction boundary for this Behavior. The behavior-named class keeps one public
+static execute method.]
+
+- Command: [authenticated actor plus untrusted behavior input]
+- Returns: [plain schema-inferred record or serializable result]
+- Uses: [Models, Policies, and Integrations]
+- Authorizes: private `static authorize(actor, records)` delegates to [Policy]
+
+### Scenarios
+
+#### Scenario: [Successful behavior]
+
+##### PreDB
+[table]:
+[state]
+
+##### Steps
+* Call: [BehaviorName].execute({ actorId, input })
+* Returns: [expected result]
+
+##### PostDB
+[table]:
+[expected state]
+
+#### Scenario: [Authorization or business failure]
+
+##### PreDB
+[table]:
+[state]
+
+##### Steps
+* Call: [BehaviorName].execute({ actorId: otherActor.id, input })
+* Throws: "[expected error]"
+
+##### PostDB
+[unchanged state]
+
+---
+
+## Action: [actionName](input: InputType): Promise<ActionResponse<ResultType>>
+
+Use an Action by default. If the behavior needs HTTP semantics, streaming, a
+webhook, or external-client access, replace or supplement this section with the
+Route format from `docs/references/specification.md`. An Action and Route may
+coexist only when they expose distinct entry-point semantics; each calls exactly
+one Service.
+
+File: `[behavior-path]/[action-name].action.ts`
+
+[Controller boundary that authenticates, adapts transport input, calls one
+Service, and translates its result or errors.]
+
+- Given: [request input and authentication assumptions]
+- Returns: [public Action response]
+- Calls: [BehaviorName].execute
+
+### Scenarios
+
+#### Scenario: [Authenticated request]
+
+##### PreDB
+[table]:
+[state]
+
+##### Steps
+* Call: [actionName](input) as [actor]
+* Returns: [expected response]
+
+##### PostDB
+[expected state]
+
+#### Scenario: Unauthenticated request
+
+##### PreDB
+[table]:
+[initial state]
+
+##### Steps
+* Call: [actionName](input) without a session
+* Returns: { success: false, error: "Unauthorized" }
+
+##### PostDB
+[unchanged state]
+
+---
+
+## Query or Mutation Module
+
+File:
+- Initial page read and page-wide keys: `app/[page]/[page-name].query.ts`
+- Additional/on-demand read: `[behavior-path]/[behavior-name].query.ts`
+- Write: `[behavior-path]/[behavior-name].mutation.ts`
+
+[Describe the TanStack Query key, Action-backed query/mutation function,
+optimistic transition, reconciliation, invalidation, and rollback. Authenticated
+user-owned keys include actor identity.]
+
+---
+
+## Behavior Hook: use[BehaviorName]()
+
+File: `[behavior-path]/use-[behavior-name].hook.ts`
+
+[Public Presentation entry point for this Behavior.]
 
 ### State
 - isLoading: boolean
 - error: string | null
 
 ### Returns
-- handle[BehaviorName]: (input: Type) => Promise<void> - triggers the behavior
-- isLoading: boolean - submission in progress
-- error: string | null - current error message
+- handle[BehaviorName]: (input: Type) => Promise<ResultType>
+- isLoading: boolean
+- error: string | null
 
 ### Dependencies
-- useSetAtom([atomName]) - for optimistic updates
+- `[page-name].query.ts`, `[behavior-name].query.ts`, or `[behavior-name].mutation.ts`
+- `useQuery` or `useMutation` from TanStack Query
 
-### Example: [Primary Use Case]
+### Scenarios
 
-#### PreState
-[atomName]: []
+#### Scenario: [Successful cache transition]
+
+##### PreState
+query `['resource', actorId, 'list']`: [initial cache]
 isLoading: false
 error: null
 
-#### Steps
-* Call: handle[BehaviorName]({ field: "value" })
-* Returns: void
+##### Steps
+* Call: handle[BehaviorName](input)
+* Returns: [result]
 
-#### PostState
-[atomName]: [{ id: 1, field: "value", pending: false }]
+##### PostState
+query `['resource', actorId, 'list']`: [final cache]
 isLoading: false
 error: null
 
-### Example: [Validation Error]
+##### PostDB
+[table]:
+[expected persisted state, when this Hook changes persistence]
 
-#### PreState
-[atomName]: []
-isLoading: false
-error: null
+#### Scenario: [Rollback]
 
-#### Steps
-* Call: handle[BehaviorName]({ field: "" })
-* Throws: "[Validation error message]"
+##### PreState
+[initial cache]
 
-#### PostState
-[atomName]: []
-isLoading: false
-error: "[Validation error message]"
+##### Steps
+* Call: handle[BehaviorName](invalidInput)
+* Throws: "[expected error]"
+
+##### PostState
+[restored cache and error state]
+
+##### PostDB
+[expected unchanged persisted state, when applicable]
 
 ---
 
@@ -162,60 +282,60 @@ error: "[Validation error message]"
 
 File: `[page-path]/components/[component-name].tsx`
 
-[Single sentence describing what this component renders and its purpose]
+[What the component renders and which public Behavior Hook it consumes.]
 
 ### Props
 - [propName]: [Type] - [description]
-- [propName]?: [Type] - [optional prop description]
 
 ### State
 
 #### Local
-- [stateName]: [Type] - [description]
+- [stateName]: [Type]
 
 #### Shared
-- [atomName]: [Type] - [description of shared state]
+- [atom]: [Type] - Jotai UI state only
 
-### Children
-- [ChildComponent] - [purpose]
-- [ChildComponent] - [purpose]
+Server data is consumed through the public Behavior Hook and TanStack Query; it
+is not declared as component-owned state.
 
 ---
 
 ## Integration: [IntegrationName]
 
-File: `shared/integrations/[integration-name]/index.ts`
+File: `shared/integrations/[integration-name].ts`
 
-[Single sentence describing what external system this integrates with and why]
+[External system adapter called by the Service.]
 
 ### Methods
+- [method](input: Type): Promise<ResultType>
 
-#### [methodName](input: Type): Promise<ResultType>
-- Given: [input parameters]
-- Returns: [expected result]
-- Throws: [error conditions]
+### Scenarios
 
-### Example: [Primary Use Case]
+#### Scenario: [External success or normalized failure]
 
-#### Steps
-* Call: [IntegrationName].[methodName]({ param: "value" })
-* Returns: { result: "data" }
-
-### Example: [Error Case]
-
-#### Steps
-* Call: [IntegrationName].[methodName]({ param: "invalid" })
-* Throws: "[Expected error]"
+##### Steps
+* Call: [IntegrationName].[method](input)
+* Returns: [expected normalized result]
 
 # Tasks
 
-Implementation tasks for this feature
-
-* [ ] Backend implementation
-* [ ] Frontend components
-* [ ] Testing
-* [ ] Documentation
+* [ ] Infrastructure
+  * [ ] Add/update Model and its real in-memory database tests
+  * [ ] Add/update Integration when required
+* [ ] Service
+  * [ ] Add/update Policy and pure Policy tests
+  * [ ] Implement `[behavior-name].service.ts`
+  * [ ] Add `[behavior-name].service.test.ts` with PreDB/PostDB
+* [ ] Controller
+  * [ ] Implement Action or Route calling exactly one Service
+  * [ ] Add boundary tests using the real Service/Model/database path
+* [ ] Presentation
+  * [ ] Implement query/mutation module and public Hook
+  * [ ] Add Hook cache tests using the real Action and in-memory database
+  * [ ] Implement Components and focused presentation tests
+* [ ] Verification
+  * [ ] Run focused tests, `bun run test`, and `bun run typecheck`
 
 # Notes
 
-Additional implementation considerations and decisions
+[Additional implementation decisions.]

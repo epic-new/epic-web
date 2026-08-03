@@ -15,6 +15,8 @@ description: Drive the Epic CLI (`epic`) — projects, PRDs, issues, and the age
 
 `epic whoami` prints the active user and the backend URL it will hit. Do that first when the session is new or the target is unclear — the same command against a different profile writes to a different world.
 
+It answers *where*, not *whether*: `whoami` reports the stored profile and **does not validate the token**, so it prints a clean name and email against a session that expired weeks ago. The cheap real check is any read that hits the API — `epic project list` — which is what surfaces `Your session has expired`.
+
 - `epic profile list` — all profiles, `*` on the active one. (`epic profile` with no subcommand prints help, not the list.)
 - `epic --as <profile> <command>` — one-off override, or `epic profile switch <name>` to change the default.
 - Credentials resolve from `EPIC_OAUTH_TOKEN`, then the pair `EPIC_API_URL` + `EPIC_ACCESS_TOKEN`, then the active profile. **`EPIC_OAUTH_TOKEN` alone targets production**, whatever the profile says. Leave those variables unset and let the profile resolve.
@@ -33,6 +35,19 @@ description: Drive the Epic CLI (`epic`) — projects, PRDs, issues, and the age
 | Agent transcript | `epic issue log <ID> [--session build\|verify\|merge]` |
 
 Anything that runs an agent (`build`, `plan`, `execute`, `verify`, `fix`, `review`, `generate`, `break`, `interview`) attaches a live viewer by default. Pass `-b` to detach and return immediately; without it, in a non-interactive context, the command holds the terminal.
+
+### `epic login` has no `-b` — give it a pty
+
+`epic login` renders its device-authorization flow through the same TUI, and has no `-b`. With
+no terminal it prints **nothing and exits 1** — the verification URL and code never appear.
+Wrap it in a pty:
+
+```bash
+script -qec "epic login <profile> --url <backend-url>" /dev/null
+```
+
+The output is a raw ANSI dump with the URL and the 8-character code among the escape
+sequences. It blocks polling until approved, so run it in the background.
 
 ## Create and link
 
@@ -138,7 +153,9 @@ profile, usually via `epic --as <admin-profile>`.
 | "session in progress" but nothing is running | Sidecar outlived its tmux session | `epic issue stop <ID>` / `epic prd stop <ID>`, then re-run |
 | `409 ISSUE_LOCKED_BUILDING` | A build owns the content | `epic issue sessions`; wait, or stop the build |
 | "not linked to a project" | No `projectId` in this repo | `epic project link <ref>` |
-| "Your session has expired" | Token is stale | `epic login` |
+| "Your session has expired" | Token is stale | `epic login` — under a pty, see above |
+| `epic login` printed nothing and exited 1 | TUI device flow with no terminal, and there is no `-b` | Re-run under a pty: `script -qec "epic login …" /dev/null` |
+| `whoami` looks healthy but every command says the session expired | `whoami` reads the stored profile without validating the token | Trust `epic project list`, not `whoami`, then `epic login` |
 | A write landed somewhere unexpected | Wrong profile | `epic whoami` before writes |
 | A detached (`-b`) agent vanished right after starting | Its tmux server was a child of the shell that launched it and died with it | Launch it detached from the process group: `setsid epic issue build <ID> --local -b` |
 | A remote build starts, then fails on its first call home | The sandbox cannot reach a `localhost` backend | Build `--local`, or point at a publicly reachable backend |

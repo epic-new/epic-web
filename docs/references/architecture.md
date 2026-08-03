@@ -1,67 +1,127 @@
-# Three-Layer Architecture Reference
+# Four-Layer Behavior-Oriented Architecture Reference
 
-> A uni-directional layering model that keeps React UI, server logic, and external integrations cleanly separated.
+> A unidirectional architecture that separates presentation, transport control,
+> business services, and infrastructure while keeping each user behavior
+> colocated as a vertical slice.
 
 ## Architecture Overview
 
 ```
 +-------------------------------------+
 |        PRESENTATION LAYER           |
-|   Components -> Hooks -> States     |
-|          (Browser)                  |
+| Components + Hooks + Query State    |
 +-------------------------------------+
               |
               v
 +-------------------------------------+
-|       ORCHESTRATION LAYER           |
-|   Actions + Routes + Workflows      |
-|          (Server)                   |
+|         CONTROLLER LAYER            |
+| Actions + Routes + Workflow Inputs  |
++-------------------------------------+
+              |
+              v
++-------------------------------------+
+|           SERVICE LAYER             |
+| Services + Policies + Transactions  |
 +-------------------------------------+
               |
               v
 +-------------------------------------+
 |      INFRASTRUCTURE LAYER           |
-|    Integrations  +  Models          |
-|          (Server)                   |
+| Models + Database + Integrations    |
 +-------------------------------------+
 ```
 
-**Critical Rule**: Data flows top to bottom only. No layer may import from layers above it.
+**Critical rule**: production dependencies flow downward one layer at a time.
+Presentation cannot skip Controller, and Controller cannot skip Service to access
+Infrastructure directly.
 
-**Behaviors** (user-triggered) and **Automations** (system-triggered) are the feature units that span these layers. A Behavior is triggered by a user action. An Automation is triggered by a schedule or internal event and has no Presentation layer.
+Layers describe responsibilities and import boundaries, not top-level folders.
+Feature files remain colocated in `app/[page]/behaviors/[name]/`.
+
+**Behaviors** (user-triggered) and **Automations** (system-triggered) are the
+functional units that span layers. A Behavior is triggered by a user action. An
+Automation is triggered by a schedule or internal event and has no Presentation
+layer.
 
 ---
 
 ## Layer Responsibilities
 
-### Presentation Layer (Browser)
+### Presentation Layer
 
 | Component | Responsibility |
 |-----------|----------------|
 | **Components** | Render UI, collect user input, consume hooks |
-| **Hooks** | Validate input (Zod), read/write server state via TanStack Query (`useQuery`/`useMutation`), manage UI state (Jotai), optimistic updates, call Actions |
-| **Queries** | `[name].query.ts` options files (`queryKey` + `queryFn`) shared by server prefetch and client hooks |
+| **Hooks** | Perform optional UX validation, read/write server state via TanStack Query (`useQuery`/`useMutation`), manage UI state (Jotai), optimistic updates, and call Controller entry points |
+| **Queries** | `[page-name].query.ts` owns the initial page query and page-wide keys; additional/on-demand reads may use behavior `[name].query.ts` files |
 | **States** | Jotai atoms for **UI state only** (dialogs, selections, filter/sort/page inputs) |
 
 **Server state vs UI state**: All server state (lists, records, their loading/error/cache) lives in the **TanStack Query** cache. **Jotai is retained for pure UI state** — never for server data. Filter/sort/pagination atoms are UI state that feed query keys.
 
-**May import**: React, Zod, Jotai, TanStack Query, Actions
+**May import**: React, Zod, Jotai, TanStack Query, Actions and other Controller entry points
 
-**Must NOT import**: Database clients, Drizzle, Integrations, Models, server-only code
+**Must NOT import**: Services, Policies, Models, database clients, Drizzle,
+Integrations, or other server-only implementation code
 
 ---
 
-### Orchestration Layer (Server)
+### Controller Layer
 
 | Component | Responsibility |
 |-----------|----------------|
-| **Actions** | Server Actions for behaviors (direct import, RPC-style) |
-| **Routes** | HTTP endpoints for behaviors (fetch-based, supports streaming) |
-| **Workflows** | Long-running background jobs/processes |
+| **Actions** | Thin Server Action controllers for authentication, transport conversion, calling one Service, and error translation |
+| **Routes** | HTTP controllers for streaming, webhooks, HTTP semantics, or external clients |
+| **Workflow entry points** | Durable invocation and checkpoint coordination; side-effecting steps delegate to Services |
 
-**May import**: Integrations, Models, auth/context utilities
+**May import**: Services, authentication utilities, framework request/response APIs
 
-**Must NOT import**: React, `window`, Jotai atoms, direct database queries
+**Must NOT import**: Models, Drizzle, schema tables, database clients,
+Integrations, React, `window`, or Jotai atoms
+
+Actions and Routes implement the Controller role without requiring controller
+classes or a controller directory. Each entry point calls exactly one Service and
+never accesses Infrastructure directly.
+
+Authentication belongs here. Controllers derive the actor from the request; they
+never accept an actor or ownership identifier supplied by browser input.
+
+Schema-inferred records may be returned through a Service and Controller as plain,
+serializable values. Presentation imports the public result type from the Action
+contract (for example `ItemRecord` as exposed by `listItems`), not directly from a
+Model. Likewise, Service command types originate at the Service boundary and are
+exposed through the Controller; Services never import input types from
+Presentation modules.
+
+---
+
+### Service Layer
+
+| Component | Responsibility |
+|-----------|----------------|
+| **Service classes** | One stateless class per behavior; authoritative validation, authorization, business rules, sequencing, and transaction boundaries |
+| **Policies** | Pure authorization decisions over an actor and the records involved in the behavior |
+
+The existing server Behavior class becomes a Service by renaming
+`[name].behavior.ts` to `[name].service.ts`. It remains in the behavior directory,
+keeps the behavior-named class (for example `CreateItem`), and keeps one public
+`static execute` method. This is a rename and responsibility split, not an
+additional abstraction or a `CreateItemService` wrapper.
+
+Every Service that requires authorization calls a private `static authorize(actor,
+records)` from inside `execute`; that method delegates the decision to a Policy.
+Policies do not authenticate, query, mutate, or start transactions.
+
+Services decide the atomicity strategy. Infrastructure provides transactions
+and guarded writes, and Models accept a transaction executor when several reads
+or writes must stay in one scope. For a single mutation after authorization, a
+Model may instead make the write conditional on the policy-relevant state of the
+record that was authorized. Multi-record changes use a transaction.
+
+**May import**: Models, Integrations, Policies, validation libraries, transaction
+facilities
+
+**Must NOT import**: React, Hooks, Actions, Routes, Next request/response APIs,
+Jotai, or TanStack Query
 
 ---
 
@@ -71,27 +131,34 @@ The Infrastructure layer handles all communication with the external world: data
 
 | Component | Responsibility |
 |-----------|----------------|
-| **Models** | Database access via Drizzle ORM (Active Record pattern) |
+| **Models** | Static, table-oriented persistence APIs that own Drizzle queries and return schema-inferred plain records |
+| **Database** | Drizzle client, schema definitions, migrations, and transaction implementation |
 | **Integrations** | External API clients (email, payments, storage, etc.) |
 
 **May import**: Drizzle/SQL client, external APIs, SDKs
 
-**Must NOT import**: React, Jotai, Actions, Hooks, Components
+**Must NOT import**: Presentation, Controllers, Services, or Policies
+
+Models live in `shared/models/`, use static methods, and return schema-inferred
+plain records such as `UserRecord = typeof user.$inferSelect`. Models do not receive an actor, make
+authorization decisions, encode use-case sequencing, or return class instances.
 
 ---
 
 ## One-Way Data Flow
 
-- **Infrastructure** never calls **Orchestration** or **Presentation**
-- **Orchestration** never calls **Presentation**
+- **Infrastructure** never calls **Service**, **Controller**, or **Presentation**
+- **Service** never calls **Controller** or **Presentation**
+- **Controller** never calls **Presentation**
 - **Presentation** Components never contain server code or manage atoms directly
 - **Presentation** Hooks never touch the database directly
+- **Controller** entry points never import Models, Drizzle, or Integrations
 
-```
-Component -> Hook -> Action -> Integration -> Database
-                                    |
-                                    v
-                              External API
+```text
+Component -> Hook -> Action/Route -> Service.execute
+                                         |---> Policy
+                                         |---> Model ------> Database
+                                         `---> Integration -> External system
 ```
 
 ---
@@ -108,7 +175,7 @@ A behavior may have at most one Action, one Route, and one Workflow. Each serves
 | Long-running | No | No | Yes |
 | Retries | Manual | Manual | Automatic |
 | File | `[name].action.ts` | `route.ts` | `[name].workflow.ts` |
-| Location | `behaviors/[name]/actions/` | `behaviors/[name]/routes/` | `behaviors/[name]/workflows/` |
+| Location | `behaviors/[name]/` | `behaviors/[name]/routes/` | `behaviors/[name]/workflows/` |
 
 ### When to Use Each
 
@@ -132,7 +199,7 @@ A behavior may have at most one Action, one Route, and one Workflow. Each serves
 
 **Non-streaming route:**
 ```typescript
-const response = await fetch(`/${page}/behaviors/${behavior}`, {
+const response = await fetch(`/${page}/behaviors/${behavior}/routes`, {
   method: 'POST',
   body: JSON.stringify(input),
 });
@@ -141,7 +208,7 @@ const data = await response.json();
 
 **Streaming route:**
 ```typescript
-fetchEventSource(`/${page}/behaviors/${behavior}`, {
+fetchEventSource(`/${page}/behaviors/${behavior}/routes`, {
   method: 'POST',
   body: JSON.stringify(input),
   signal: abortController.signal,
@@ -157,25 +224,50 @@ fetchEventSource(`/${page}/behaviors/${behavior}`, {
 
 Server state is owned by the TanStack Query cache. Actions are the `queryFn`/`mutationFn` (Action-first); Routes are only for streaming/webhooks. The root layout wraps the app in `QueryClientProvider` using a `getQueryClient()` helper — a fresh `QueryClient` per request on the server, a singleton on the client — with a default `staleTime > 0`.
 
-### The `[name].query.ts` convention
+### The `[page-name].query.ts` convention
 
-Each read behavior exports a query-options factory next to its action so the server prefetch and the client hook agree on key and function:
+Each page owns one page-wide key factory and its initial query-options factory in `[page-name].query.ts` (for example, `items.query.ts`), so server prefetch, client hooks, and mutations agree on keys and functions. Additional or on-demand read behaviors may keep a `[name].query.ts` beside the behavior, but import their keys from `[page-name].query.ts`.
+
+For authenticated user-owned data, every page-wide key MUST include the actor/user identity. The identity partitions client cache entries only; actions still derive identity from authentication and enforce authorization on the server.
 
 ```typescript
-// behaviors/list-items/list-items.query.ts
+// app/items/items.query.ts
+import { queryOptions } from '@tanstack/react-query';
+import { listItems } from './behaviors/list-items/list-items.action';
+
 export const itemsKeys = {
-  all: ['items'] as const,
-  lists: () => [...itemsKeys.all, 'list'] as const,
-  list: (params: ListParams) => [...itemsKeys.lists(), params] as const,
+  all: (actorId: string) => ['items', actorId] as const,
+  lists: (actorId: string) => [...itemsKeys.all(actorId), 'list'] as const,
+  list: (actorId: string, params: ListParams) => [...itemsKeys.lists(actorId), params] as const,
+  details: (actorId: string) => [...itemsKeys.all(actorId), 'detail'] as const,
+  detail: (actorId: string, id: string) => [...itemsKeys.details(actorId), id] as const,
 };
 
-export function listItemsQuery(params: ListParams) {
+export function listItemsQuery(actorId: string, params: ListParams) {
   return queryOptions({
-    queryKey: itemsKeys.list(params),
+    queryKey: itemsKeys.list(actorId, params),
     queryFn: async () => {
-      const result = await listItems(params);   // the Action
-      if (result.error) throw new Error(result.error);
-      return result.data;
+      const response = await listItems(params);
+      if (!response.success) throw new Error(response.error);
+      return response.data;
+    },
+  });
+}
+```
+
+```typescript
+// app/items/behaviors/view-item/view-item.query.ts
+import { queryOptions } from '@tanstack/react-query';
+import { itemsKeys } from '../../items.query';
+import { viewItem } from './view-item.action';
+
+export function viewItemQuery(actorId: string, id: string) {
+  return queryOptions({
+    queryKey: itemsKeys.detail(actorId, id),
+    queryFn: async () => {
+      const response = await viewItem(id);
+      if (!response.success) throw new Error(response.error);
+      return response.data;
     },
   });
 }
@@ -188,55 +280,103 @@ The page is a Server Component that prefetches and hands the dehydrated cache to
 ```tsx
 // page.tsx (Server Component)
 const queryClient = getQueryClient();
-await queryClient.prefetchQuery(listItemsQuery(defaultParams));
+await queryClient.prefetchQuery(listItemsQuery(actorId, defaultParams));
 return (
   <HydrationBoundary state={dehydrate(queryClient)}>
-    <PageContent />   {/* client component calls useQuery(listItemsQuery(params)) */}
+    <PageContent actorId={actorId} />   {/* client calls useQuery(listItemsQuery(actorId, params)) */}
   </HydrationBoundary>
 );
 ```
 
-Default prefetch params must match the client's first render (atom initial values) so the query key — and thus hydration — matches. Filter/sort/page atoms are UI state that feed the key.
+The prefetched actor identity and default params must match the client's first render so the query key — and thus hydration — matches. Filter/sort/page atoms are UI state that feed the key.
+
+A Server Component may read the authenticated session to redirect unauthenticated
+users and to partition or prefetch the initial cache. That is a Presentation
+concern, not authorization. The Action or Route authenticates independently and
+the Service still authorizes the behavior; prefetched identity is never trusted
+as proof of permission.
 
 ### Mutations — optimistic by default
 
-`useMutation` snapshots in `onMutate`, rolls back in `onError`, and invalidates in `onSettled`. Keep a hook's `{ handleX, isLoading, error }` shape so components stay untouched.
+Write options live in `[name].mutation.ts`, separate from the public Hook. The
+module snapshots and applies pending state in `onMutate`, replaces temporary data
+with the authoritative Action result in `onSuccess`, rolls back in `onError`, and
+invalidates in `onSettled`. The Hook only consumes those options and exposes its
+`{ handleX, isLoading, error }` contract.
 
 ```typescript
-useMutation({
-  mutationFn: (input) => createItem(input),
-  onMutate: async (input) => {
-    await queryClient.cancelQueries({ queryKey: itemsKeys.lists() });
-    const previous = queryClient.getQueriesData({ queryKey: itemsKeys.lists() });
-    queryClient.setQueriesData({ queryKey: itemsKeys.lists() }, optimistic(input));
-    return { previous };
-  },
-  onError: (_e, _v, ctx) =>
-    ctx?.previous?.forEach(([key, data]) => queryClient.setQueryData(key, data)),
-  onSettled: () => queryClient.invalidateQueries({ queryKey: itemsKeys.all }),
-});
+// create-item.mutation.ts
+export function createItemMutation(queryClient: QueryClient, actorId: string) {
+  return mutationOptions({
+    mutationFn: async (input: CreateItemInput) => {
+      const response = await createItem(input);
+      if (!response.success) throw new Error(response.error);
+      return response.data;
+    },
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: itemsKeys.lists(actorId) });
+      const previous = queryClient.getQueriesData({
+        queryKey: itemsKeys.lists(actorId),
+      });
+      const temporaryId = `temp-${Date.now()}`;
+      queryClient.setQueriesData(
+        { queryKey: itemsKeys.lists(actorId) },
+        (old) => addPendingItem(old, input, temporaryId),
+      );
+      return { previous, temporaryId };
+    },
+    onSuccess: (created, _input, context) =>
+      queryClient.setQueriesData(
+        { queryKey: itemsKeys.lists(actorId) },
+        (old) => replaceItem(old, context?.temporaryId, created),
+      ),
+    onError: (_error, _input, context) =>
+      context?.previous.forEach(([key, data]) =>
+        queryClient.setQueryData(key, data),
+      ),
+    onSettled: () => queryClient.invalidateQueries({
+      queryKey: itemsKeys.all(actorId),
+    }),
+  });
+}
+
+// use-create-item.hook.ts
+const mutation = useMutation(createItemMutation(useQueryClient(), actorId));
 ```
 
 Mutations with no list representation (e.g. set-password, redirect-on-success actions) are plain mutations without `onMutate`.
 
 ---
 
-## Thin Client, Fat Server
+## Thin Presentation, Explicit Server Boundaries
 
-The frontend coordinates nothing. It triggers intent and reacts to outcomes.
+The Presentation layer coordinates no business workflow. It triggers intent and
+reacts to outcomes.
 
 ### Client Constraints
 
-- No hook may call more than one backend entry point
-- No component may call backend code directly
-- No frontend code may encode business rules
+- No hook may call more than one Controller entry point
+- No component may call Controller code directly
+- No Presentation code may encode business rules
 - No orchestration, sequencing, or workflow logic
 
-### Server Constraints
+### Controller Constraints
 
-- Owns all business logic and orchestration
-- Owns sequencing and transactional boundaries
-- Owns integrations and domain rules
+- Owns authentication and request-derived actor construction
+- Owns transport conversion and response/error translation
+- Calls exactly one Service
+- Never accesses Models, Drizzle, or Integrations directly
+
+### Service Constraints
+
+- Owns authoritative validation, authorization, business rules, and sequencing
+- Owns transaction boundaries
+- Coordinates Models and Integrations
+
+### Infrastructure Constraints
+
+- Owns database queries and external-system communication
+- Contains no authentication, authorization, or use-case orchestration
 
 ### Caching is a client concern (TanStack Query)
 
@@ -247,7 +387,7 @@ Adopting TanStack Query consciously relaxes the strict "thin client" rule: the c
 > "Is the client deciding anything it shouldn't?"
 
 Violations:
-- Calling multiple backend endpoints from one hook
+- Calling multiple Controller entry points from one hook
 - Branching based on backend **business** semantics
 - Encoding domain rules or multi-step orchestration on the client
 - Stitching partial backend results together
@@ -258,11 +398,45 @@ Violations:
 
 ## Import Rules Summary
 
-| From / To | Presentation | Orchestration | Infrastructure |
-|-----------|--------------|---------------|----------------|
-| **Presentation** | Yes | Yes (Actions only) | No |
-| **Orchestration** | No | Yes | Yes |
-| **Infrastructure** | No | No | Yes |
+| From / To | Presentation | Controller | Service | Infrastructure |
+|-----------|--------------|------------|---------|----------------|
+| **Presentation** | Yes | Yes (entry points only) | No | No |
+| **Controller** | No | Yes | Yes | No |
+| **Service** | No | No | Yes | Yes |
+| **Infrastructure** | No | No | No | Yes |
+
+Production code may not skip a layer. Tests may import database and schema modules
+only for deterministic `PreDB` setup and `PostDB` assertions.
+
+---
+
+## Testing Close to Reality
+
+Model, Service, Action, and behavior Hook tests use the real application code and
+an isolated in-memory SQLite database. The database is recreated or cleared
+between scenarios, so each test can describe its state with `PreDB`, execute the
+real path, and verify persisted state with `PostDB`.
+
+The former server Behavior class is now the Service class, so its direct module
+test is `[name].service.test.ts`. Do not keep or generate a parallel
+`[name].behavior.test.ts`. *Behavior* still names the functional vertical slice
+and its user-facing scenarios; it is no longer a separate server module or test
+boundary.
+
+- Model tests call the static Model directly.
+- Service tests call the behavior-named Service's `execute` method with real
+  Models and Policies.
+- Action tests mock only authentication or framework request context, then
+  exercise the real Action -> Service -> Model path.
+- Hook tests call the public handler and exercise the real Hook -> Action/Route ->
+  Service -> Model path while asserting both TanStack Query cache state and the
+  database. For Route-backed Hooks, replace only the unavailable browser network
+  transport while keeping the real Route test as the HTTP contract boundary.
+
+Do not mock Models, Services, Actions, or the database inside those integration
+paths. Mock only boundaries that cannot be meaningfully local, such as session
+retrieval, framework transport objects, external network providers, and
+clocks/randomness when determinism requires it.
 
 ---
 
@@ -270,10 +444,15 @@ Violations:
 
 | Type | Location | File Pattern |
 |------|----------|--------------|
-| Components | `app/[page]/components/` | `PascalCase.tsx` |
-| Hooks | `app/[page]/behaviors/[name]/` | `use-[name].ts` |
+| Components | `app/[page]/components/` | `[component-name].tsx` (kebab-case) |
+| Service class | `app/[page]/behaviors/[name]/` | `[name].service.ts` |
+| Policy | Behavior, page-shared, or global shared scope | `[resource].policy.ts` |
+| Behavior hook entry point | `app/[page]/behaviors/[name]/` | `use-[name].hook.ts` |
+| Initial page query + page-wide keys | `app/[page]/` | `[page-name].query.ts` |
+| Additional/on-demand query options | `app/[page]/behaviors/[name]/` | `[name].query.ts` |
+| Mutation options | `app/[page]/behaviors/[name]/` | `[name].mutation.ts` |
 | States | `app/[page]/behaviors/[name]/` | `state.ts` |
-| Actions | `app/[page]/behaviors/[name]/actions/` | `[name].action.ts` |
+| Actions | `app/[page]/behaviors/[name]/` | `[name].action.ts` |
 | Routes | `app/[page]/behaviors/[name]/routes/` | `route.ts` |
 | Workflows (behavior) | `app/[page]/behaviors/[name]/workflows/` | `[name].workflow.ts` |
 | Workflow Steps | `app/[page]/behaviors/[name]/workflows/steps/` | `[step-name].ts` |
@@ -291,7 +470,8 @@ Code can be shared at three levels, following the same structure at each scope:
 ```
 shared/                              <- Global: shared across all pages
   integrations/
-  models/
+  models/                            <- Infrastructure shared by Services
+  policies/                          <- Policies shared across pages
   actions/
   hooks/
   states/
@@ -302,15 +482,24 @@ shared/                              <- Global: shared across all pages
         steps/
 
 app/[page]/
+  [page-name].query.ts               <- Initial query + page-wide query keys
   shared/                            <- Page-level: shared between behaviors
     state.ts
     actions/
     hooks/
+    policies/
   behaviors/
     [behavior-name]/
       state.ts                       <- Behavior-level: specific to this behavior
-      use-[name].ts
-      [name].action.ts
+      [name].service.ts              <- Service class; behavior-named, static execute
+      [name].action.ts               <- Thin Controller boundary
+      use-[name].hook.ts             <- Exports the public use[Name] hook
+      [name].query.ts                <- Additional/on-demand read only; imports page keys
+      [name].mutation.ts             <- Write behavior only
+      tests/
+        [name].service.test.ts
+        [name].action.test.ts
+        use-[name].hook.test.tsx
 ```
 
 ### Scope Rules
@@ -324,7 +513,7 @@ app/[page]/
 ### When to Use Each Level
 
 **Behavior-level** (default):
-- State, hooks, and actions specific to one behavior
+- State, hooks, Controllers, Services, and Policies specific to one behavior
 - Start here; promote to higher levels only when needed
 
 **Page-level shared**:
@@ -332,7 +521,7 @@ app/[page]/
 - Actions or hooks reused within the same page
 
 **Global shared**:
-- Models and Integrations (always global)
+- Models, Integrations, cross-page Policies, and globally reused actions/utilities
 - Code needed by 2+ pages
 - Core utilities used throughout the app
 - Automations (always global — not page-specific)
@@ -371,7 +560,8 @@ export async function myAutomation() {
 
 async function processStep() {
   "use step";
-  // Full runtime access — DB, APIs, file system
-  return db.users.findAll();
+  // A side-effecting step enters through a Service; it does not call a Model,
+  // Drizzle, or an Integration directly.
+  return SendDigest.execute({ actor: systemActor, input });
 }
 ```

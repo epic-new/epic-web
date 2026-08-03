@@ -4,15 +4,30 @@ This file provides guidance to coding agents (Claude Code, Codex, OpenCode) work
 
 ## Architecture
 
-**Three-layer architecture** with one-way data flow (top to bottom only):
+**Four-layer architecture** with adjacent, one-way dependencies:
 
-| Layer | Runs On | Components | May Import | Must NOT Import |
-|-------|---------|------------|------------|-----------------|
-| **Frontend** | Browser | Components, Hooks, Queries, States | React, Zod, TanStack Query, Jotai, Actions | Drizzle, Integrations, server-only |
-| **Backend** | Server | Actions, Routes | Integrations, auth utilities | React, Jotai, direct DB access |
-| **Infrastructure** | Server | Integrations, Models | Drizzle, external APIs | React, Actions, Hooks |
+| Layer | Components | May Import | Must NOT Import |
+|-------|------------|------------|-----------------|
+| **Presentation** | Components, Hooks, Queries, Mutations, UI States | React, Zod, TanStack Query, Jotai, Controller entry points | Services, Policies, Models, Drizzle, Integrations |
+| **Controller** | Actions, Routes, Workflow entry points | Services, auth and transport utilities | Models, Drizzle, schema tables, Integrations, React |
+| **Service** | Behavior-named Service classes, Policies | Models, Integrations, validation and transaction utilities | Actions, Routes, React, TanStack Query, Jotai |
+| **Infrastructure** | Models, database client/schema, Integrations | Drizzle, external APIs | Presentation, Controllers, Services, Policies |
 
-**Server state** (lists, records, caching) is owned by **TanStack Query** (`useQuery`/`useMutation`); **Jotai is for UI state only** (dialogs, selections, filter/sort/page inputs). Reads use a `[name].query.ts` options file with server prefetch + `HydrationBoundary`; mutations are optimistic by default.
+Layers are responsibilities and import boundaries, not top-level folders. Features
+remain organized as vertical slices under `app/[page]/behaviors/[name]/`.
+
+- Controllers authenticate and call exactly one Service; they never import Models.
+- A Service is the former server Behavior class renamed from `.behavior.ts` to
+  `.service.ts`. Keep its behavior-named class and public `static execute` method.
+- Services own authoritative validation, authorization, business rules, and
+  transaction boundaries. Authorized Services call a private
+  `static authorize(actor, records)` that delegates to a pure Policy.
+- Static Models live in `shared/models`, own all Drizzle queries, and return plain
+  schema-inferred records. Models never authenticate or authorize.
+- The former server Behavior module is now the Service module. Test it through
+  `[name].service.test.ts`; do not create a parallel `[name].behavior.test.ts`.
+
+**Server state** (lists, records, caching) is owned by **TanStack Query** (`useQuery`/`useMutation`); **Jotai is for UI state only** (dialogs, selections, filter/sort/page inputs). The initial page read and page-wide query-key factory live in `app/[page]/[page-name].query.ts`; additional or on-demand reads may use `[name].query.ts` beside their behavior. Pages prefetch the initial query and hydrate it with `HydrationBoundary`; mutations are optimistic by default. For authenticated user-owned data, every page-wide query key MUST include the actor/user identity so cached data cannot cross identities; this partitions cache data and never replaces server-side authorization.
 
 See `docs/references/architecture.md` for detailed patterns and code examples.
 
@@ -20,14 +35,13 @@ See `docs/references/architecture.md` for detailed patterns and code examples.
 
 ```
 app/
-  /(landing-page)/     # Public pages (NO auth)
   /(app)/              # Authenticated pages (LOGIN REQUIRED)
   /admin/              # Admin pages (LOGIN + ADMIN ROLE)
   /auth/               # Auth pages (signin, signup, etc.)
   /api/                # API routes
 db/                    # Schema + migrations
 lib/                   # Utilities, auth, testing libs
-shared/                # Models + Integrations
+shared/                # Models, Integrations, Policies + global utilities
 components/ui/         # shadcn/ui components
 ```
 
@@ -36,28 +50,40 @@ components/ui/         # shadcn/ui components
 Features are organized by behavior:
 
 ```
-app/[page]/behaviors/[behavior-name]/
-  [behavior-name].action.ts      # Server action (atomic)
-  route.ts                       # Route endpoint (streaming)
-  use-[behavior-name].ts         # React hook
-  state.ts                       # Behavior-specific state (optional)
-  tests/
-    [behavior-name].spec.ts      # E2E test
-    [behavior-name].action.test.ts
-    [behavior-name].route.test.ts
+app/[page]/
+  [page-name].query.ts           # Initial page query + page-wide query keys
+  behaviors/[behavior-name]/
+    [behavior-name].service.ts   # Service class (same behavior-named static execute)
+    [behavior-name].action.ts    # Thin server-action boundary
+    use-[behavior-name].hook.ts  # Public React hook
+    [behavior-name].query.ts     # Additional/on-demand read options (optional)
+    [behavior-name].mutation.ts  # Write mutation options (when applicable)
+    routes/
+      route.ts                   # Route endpoint (streaming/HTTP semantics)
+    state.ts                     # Behavior-specific state (optional)
+    tests/
+      [behavior-name].service.test.ts
+      [behavior-name].action.test.ts
+      use-[behavior-name].hook.test.tsx
+      [behavior-name].route.test.ts
 ```
 
-A behavior has either an action OR a route, not both.
+A behavior has at most one Action, one Route, and one Workflow. They may coexist
+when they provide distinct entry-point semantics.
 
 ## File Naming
 
 | Type | Pattern |
 |------|---------|
+| Service classes | `[name].service.ts` |
 | Server actions | `[name].action.ts` |
-| Routes | `route.ts` |
-| React hooks | `use-[name].ts` |
+| Routes | `routes/route.ts` |
+| React hooks | `use-[name].hook.ts` |
+| Initial page query + keys | `[page-name].query.ts` |
+| Additional read query | `[name].query.ts` |
 | Components | `[Name].tsx` |
-| E2E tests | `[name].spec.ts` |
+| Service tests | `[name].service.test.ts` |
+| Hook tests | `use-[name].hook.test.tsx` |
 | Action tests | `[name].action.test.ts` |
 | Route tests | `[name].route.test.ts` |
 | State files | `state.ts` |
@@ -77,8 +103,7 @@ bun run db:reset         # Clean + push schema
 bun run db:squash        # Combine migrations into one
 
 # Testing
-bun run test             # Vitest unit tests
-bun run spec             # Playwright E2E tests
+bun run test             # All automated tests (Vitest)
 ```
 
 ## Testing
@@ -86,9 +111,11 @@ bun run spec             # Playwright E2E tests
 **Philosophy**: Test real code with real database, minimal mocking.
 
 **Rules**:
-- NO mocking in Playwright tests
-- NO `toHaveBeenCalled` - test outcomes, not implementation
-- USE test database, not mocks
+- Test outcomes instead of implementation details
+- Use the in-memory SQLite database for Model, Service, Action, and Hook tests
+- Action and Hook tests exercise the real Service and Model path
+- Mock only authentication/framework boundaries, external services, or a
+  component's public Hook contract
 - Start with ONE test, expand later
 - Use PreDB/PostDB for deterministic state
 
@@ -108,25 +135,34 @@ await PostDB(db, schema, { users: [{ name: 'Alice' }] });
 
 ## Epic CLI
 
-When the user is planning a project, creating/managing issues, or building/reviewing issues with the `epic` command, use the **epic-cli** skill at `.claude/skills/epic-cli/SKILL.md`. This includes requests like "create a project", "generate a PRD", "break a PRD into issues", "plan an issue", "build an issue", or "review/merge an issue".
+When the user is planning a project, creating/managing issues, or building/reviewing issues with the `epic` command, use the **epic-cli** skill at `.agents/skills/epic-cli/SKILL.md`. This includes requests like "create a project", "generate a PRD", "break a PRD into issues", "plan an issue", "build an issue", or "review/merge an issue".
 
-PRD and issue content lives in the database, read and written through the API — `.epic/`
-on disk holds only machine configuration (the linked project id, worktree config), no
-project content.
+PRD and issue content lives in the Epic database. Do not look for, create, or
+maintain tracked `.epic/prds/*.md` or `.epic/issues/*.md` files, and do not use
+`pull`, `push`, or `sync` commands (they are not part of the current CLI). During
+an agent phase, the CLI fetches the content into the exact gitignored session
+buffer named in the prompt (normally `.epic/sessions/<ID>/issue.md` or
+`.epic/sessions/<ID>/prd.md`), then PATCHes changes back and discards the buffer.
+These buffers are pure Markdown, not documents with tracked YAML lifecycle
+front matter.
 
 ## Workflow Skills
 
 The repository ships skills that encode this architecture. Prefer them over ad-hoc implementation:
 
 - **prd → break → build** is the project workflow: write a PRD, split it into issues, then `build` each issue (plan, then execute).
-- **execute** implements an issue by loading the layer skills in order: **models**, **integrations**, **actions**, **routes**, **hooks**, **components**, then **unit-tests** / **behavior-tests**.
-- **plan** writes an implementation plan into an issue; **issues** creates or updates issue files.
+- **execute** implements an issue by loading the layer skills in order: **models**, **integrations**, **services**, **actions**, **routes**, **hooks**, **components**, then **test**.
+- **plan** writes an implementation plan into the ephemeral issue buffer supplied
+  by the CLI; **issues** authors the canonical issue body that the CLI persists to
+  the database.
 
-Each layer skill (`actions`, `models`, `hooks`, `routes`, `components`, `integrations`) carries its own architecture/spec reference, so load the matching skill when writing that layer.
+Each layer skill (`models`, `integrations`, `services`, `actions`, `hooks`,
+`routes`, `components`) carries its own architecture/spec reference, so load the
+matching skill when writing that layer.
 
 ## Frontend Design
 
-When working on tasks that involve React components or UI, use the **frontend-design** skill at `.claude/skills/frontend-design/SKILL.md` for high-quality, production-grade design output.
+When working on tasks that involve React components or UI, use the **frontend-design** skill at `.agents/skills/frontend-design/SKILL.md` for high-quality, production-grade design output.
 
 ## Design System
 
@@ -158,6 +194,9 @@ After making changes, prefer running **`bun run typecheck`** as the final verifi
 - **Read selectively, never dump.** Do not `find ... | xargs cat` whole directories
   into context; open the specific files the task names, and use ranged reads
   (`sed -n 'START,ENDp'`) for large files.
-- **Never run git commands** (`status`, `add`, `commit`, `push`, branches) — git is
-  owned by the epic CLI harness end to end. Likewise never manage the dev server
-  process; the sandbox supervisor owns it.
+- **Never run git commands** unless an explicit Epic CLI review or merge phase
+  delegates a narrowly scoped git operation. Review may use read-only diff/log
+  commands; merge may use only the exact merge/conflict-resolution commands named
+  by that phase. All other repository operations remain owned by the Epic CLI
+  harness. Likewise never manage the dev server process; the sandbox supervisor
+  owns it.

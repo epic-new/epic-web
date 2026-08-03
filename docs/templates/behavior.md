@@ -1,7 +1,7 @@
 # [Behavior Name]
 
 [One paragraph describing the behavior in user-facing terms.]
-Directory: `app/[role]/[page]/behaviors/[behavior-name]/`
+Directory: `app/[page]/behaviors/[behavior-name]/`
 
 ## Rules
 
@@ -19,7 +19,7 @@ Directory: `app/[role]/[page]/behaviors/[behavior-name]/`
 - Then:
   - [Outcome]
 
-## Examples
+## Scenarios
 
 ### [Scenario Name]
 
@@ -53,4 +53,3 @@ col_a, col_b, col_c
 * Act: [Trigger the edge case]
 * Check: Error "[expected message]" is shown
 * Check: No new records are created
-

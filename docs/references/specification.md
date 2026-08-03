@@ -12,7 +12,7 @@ Project → Flow → Page → Behavior
 **Technical Specifications** describe *how the system is built* from the developer's perspective. They are a flat catalog of implementation units:
 
 ```
-Function | Class | Component | Hook | Workflow
+Function | Service | Policy | Model | Integration | Component | Hook | Route | Workflow
 ```
 
 **Behavior and Automation are the leaves of the Functional hierarchy** and the primary units that Technical specs reference. Behaviors are user-triggered; Automations are system-triggered. All specifications are written in concise, human-readable Markdown.
@@ -53,7 +53,7 @@ A project specification consists of:
 - Each automation entry includes a name, trigger type, and description
 - Behaviors are listed by name, linking pages and flows to the behavior specifications
 
-### Example
+### Scenario
 
 ```markdown
 # Project Management App
@@ -155,7 +155,7 @@ Each step references:
 - the **page path** where it occurs
 - a brief description of user intent
 
-### Example
+### Scenario
 
 ```markdown
 # User Onboarding
@@ -199,7 +199,7 @@ A page specification consists of:
 4. A list of **components** rendered on the page
 5. A list of **behaviors** available from the page
 
-### Example
+### Scenario
 
 ```markdown
 # Projects Page
@@ -274,13 +274,13 @@ Dependencies are listed as an ordered list of behaviors with their specific scen
 2. View Project: User views project details
 ```
 
-### Example
+### Scenario
 
 ```markdown
 # Create Project
 
 Allows authenticated users to create a new project.
-Directory: `pages/projects/behaviors/create-project/`
+Directory: `app/projects/behaviors/create-project/`
 
 ## Rules
 
@@ -325,7 +325,7 @@ Directory: `pages/projects/behaviors/create-project/`
 #### PreDB
 users:
 id, email, role, status
-1, user@example.com, client, active
+1, user@scenario.com, client, active
 
 projects:
 id, user_id, name, status
@@ -349,7 +349,7 @@ id, user_id, name, status
 #### PreDB
 users:
 id, email, role, status
-1, user@example.com, client, active
+1, user@scenario.com, client, active
 
 projects:
 id, user_id, name, status
@@ -363,13 +363,13 @@ id, user_id, name, status
 * Check: No new project is created
 ```
 
-### Example with Dependencies
+### Scenario with Dependencies
 
 ```markdown
 # Add Team Member
 
 Allows a project owner to add a team member to their project.
-Directory: `pages/projects/behaviors/add-team-member/`
+Directory: `app/projects/behaviors/add-team-member/`
 
 ## Dependencies
 
@@ -397,8 +397,8 @@ Directory: `pages/projects/behaviors/add-team-member/`
 #### PreDB
 users:
 id, email, role
-1, owner@example.com, client
-2, member@example.com, client
+1, owner@scenario.com, client
+2, member@scenario.com, client
 
 projects:
 id, user_id, name
@@ -409,9 +409,9 @@ id, project_id, user_id
 (empty)
 
 #### Steps
-* Act: User logs in as "owner@example.com"
+* Act: User logs in as "owner@scenario.com"
 * Act: User navigates to project details page
-* Act: User submits add member form with email "member@example.com"
+* Act: User submits add member form with email "member@scenario.com"
 * Check: Member appears in team list
 
 #### PostDB
@@ -454,7 +454,7 @@ An automation specification consists of:
 - Event: `user.signed_up` — fires when a new user completes registration
 ```
 
-### Example
+### Scenario
 
 ```markdown
 # Send Weekly Digest
@@ -487,9 +487,9 @@ Directory: `shared/automations/send-weekly-digest/`
 #### PreDB
 users:
 id, email, status
-1, alice@example.com, active
-2, bob@example.com, active
-3, carol@example.com, inactive
+1, alice@scenario.com, active
+2, bob@scenario.com, active
+3, carol@scenario.com, inactive
 
 activity_events:
 id, user_id, created_at
@@ -497,9 +497,9 @@ id, user_id, created_at
 
 #### Steps
 * Act: Scheduler triggers "Send Weekly Digest" on 2026-05-25 at 8am UTC
-* Check: Email sent to alice@example.com
-* Check: No email sent to bob@example.com (no activity this week)
-* Check: No email sent to carol@example.com (inactive)
+* Check: Email sent to alice@scenario.com
+* Check: No email sent to bob@scenario.com (no activity this week)
+* Check: No email sent to carol@scenario.com (inactive)
 
 #### PostDB
 digest_emails:
@@ -541,10 +541,19 @@ For functions that modify database state (like server actions), include scenario
 - **Steps** - function call and expected result using keywords:
   - `Call:` - invoke the function with specific inputs
   - `Returns:` - expected return value
-  - `Throws:` - expected error (for error cases)
+  - `Throws:` - expected error for non-Action functions
 - **PostDB** - database state after execution (CSV format)
 
-### Example (Simple Function)
+When the function is a Server Action, it is a Controller contract: it
+authenticates the request, adapts transport input, calls exactly one Service, and
+translates the result or error. It never imports a Model, Drizzle, schema table,
+or Integration. Every Action returns the shared serializable union
+`ActionResponse<T> = { success: true; data: T } | { success: false; error: string }`.
+Action scenarios use `Returns:` for both success and failure responses; errors
+from authentication or the Service are translated into the failure variant rather
+than specified as thrown errors.
+
+### Scenario (Simple Function)
 
 ```markdown
 ## validateProjectName(name: string): ValidationResult
@@ -555,23 +564,23 @@ Validates a project name against naming rules.
 - Returns: validation result with errors if invalid
 ```
 
-### Scenario (Function with State Changes)
+### Scenario (Server Action with State Changes)
 
 ```markdown
-## createProject(input: CreateProjectInput): Promise<Project>
+## createProject(input: CreateProjectInput): Promise<ActionResponse<ProjectRecord>>
 
 Creates a new project for the authenticated user.
 
 - Given: project name and authenticated user with "client" role
-- Returns: the newly created project
-- Calls: ProjectModel.findByNameAndUser, ProjectModel.create
+- Returns: a success response containing the newly created project, or a failure response
+- Calls: CreateProject.execute
 
 ### Scenario: Create project successfully
 
 #### PreDB
 users:
 id, email, role
-1, user@example.com, client
+1, user@scenario.com, client
 
 projects:
 id, user_id, name, status
@@ -579,7 +588,7 @@ id, user_id, name, status
 
 #### Steps
 * Call: createProject({ name: "New Project" }) as user 1
-* Returns: { id: 2, name: "New Project", status: "draft", userId: 1 }
+* Returns: { success: true, data: { id: 2, name: "New Project", status: "draft", userId: 1 } }
 
 #### PostDB
 projects:
@@ -596,7 +605,7 @@ id, user_id, name
 
 #### Steps
 * Call: createProject({ name: "My Project" }) as user 1
-* Throws: "Project name already exists"
+* Returns: { success: false, error: "Project name already exists" }
 
 #### PostDB
 projects:
@@ -606,49 +615,60 @@ id, user_id, name
 
 ---
 
-## 7. Class Specification Format
+## 7. Service Specification Format
 
-Class specifications describe **object-oriented units** including their state, methods, and relationships.
+Service specifications describe the server-side implementation of one functional
+Behavior. The Service owns authoritative validation, authorization, business
+rules, sequencing, and atomicity decisions. It delegates persistence to
+Models and external communication to Integrations.
 
 ### Structure
 
-A class specification consists of:
-1. A heading naming the **class**
-2. A short description of its responsibility
-3. **Properties** (state)
-4. **Methods** (which may reference Function specs)
-5. Optional **relationships** (extends, implements, composes)
-6. Optional **Scenarios** showing usage scenarios
+A Service specification consists of:
+1. A heading naming the class and its `execute` command
+2. A short description of the behavior it implements
+3. The command and result types
+4. Its Model, Policy, and Integration dependencies
+5. Scenarios with PreDB/Steps/PostDB
 
 ### Scenarios Section
 
-Not every method needs a scenario. Include scenarios for key usage cases that demonstrate how the class is used in practice. Scenarios follow the same PreDB/Steps/PostDB format as other specs.
+The Service is the existing behavior-named server class renamed from
+`[name].behavior.ts` to `[name].service.ts`; it is not an additional wrapper and
+does not require a `Service` suffix on the class name. Each class is stateless and
+exposes one public `static execute`.
 
-### Example
+When authorization is required, `execute` calls a private
+`static authorize(actor, records)` method. That method delegates the decision to
+a pure Policy. Service scenarios directly call `execute` and follow the same
+PreDB/Steps/PostDB format as other database-backed specs.
+
+Generate these scenarios as `[name].service.test.ts`. There is no separate
+server-side `[name].behavior.test.ts`; *Behavior* is the functional slice, while
+the Service is the technical module that implements and directly tests its
+business rules.
+
+### Scenario
 
 ```markdown
-# ProjectService
+# CreateProject.execute(command: CreateProjectCommand): Promise<ProjectRecord>
 
-Manages project lifecycle operations including creation, updates, and deletion.
+Creates one project for the authenticated actor.
 
-## Properties
-- db: Database
-- validator: ProjectValidator
-- logger: Logger
+## Command
+- actorId: string - authenticated identity supplied by the Controller
+- input: CreateProjectInput - untrusted behavior input
 
-## Methods
-- create(input: NewProject): ProjectId
-- update(id: ProjectId, changes: ProjectUpdate): Project
-- delete(id: ProjectId): void
-- findById(id: ProjectId): Project | null
+## Returns
+- ProjectRecord - schema-inferred plain record returned by ProjectModel
 
-## Relationships
-- Implements: IProjectService
-- Composes: ProjectValidator, Database
+## Dependencies
+- ProjectModel - project persistence
+- ProjectPolicy - project authorization
 
 ## Scenarios
 
-### Create a new project
+### Scenario: Create a new project
 
 #### PreDB
 projects:
@@ -656,7 +676,7 @@ id, name, status
 (empty)
 
 #### Steps
-* Call: service.create({ name: "New Project" })
+* Call: CreateProject.execute({ actorId: "1", input: { name: "New Project" } })
 * Returns: { id: 1, name: "New Project", status: "draft" }
 
 #### PostDB
@@ -664,7 +684,7 @@ projects:
 id, name, status
 1, New Project, draft
 
-### Reject duplicate project name
+### Scenario: Reject duplicate project name
 
 #### PreDB
 projects:
@@ -672,7 +692,7 @@ id, name, status
 1, Existing Project, active
 
 #### Steps
-* Call: service.create({ name: "Existing Project" })
+* Call: CreateProject.execute({ actorId: "1", input: { name: "Existing Project" } })
 * Throws: "Project name already exists"
 
 #### PostDB
@@ -683,7 +703,148 @@ id, name, status
 
 ---
 
-## 8. Component Specification Format
+## 8. Model Specification Format
+
+Model specifications describe static, table-oriented Infrastructure APIs. A
+Model owns Drizzle queries for one table and returns schema-inferred plain
+records. It does not authenticate, authorize, orchestrate a use case, or return
+class instances.
+
+### Structure
+
+A Model specification consists of:
+1. A heading naming the Model
+2. Its table and inferred record types
+3. Its static persistence methods
+4. Optional transaction requirements
+5. Scenarios with PreDB/Steps/PostDB
+
+### Scenario
+
+```markdown
+# ProjectModel
+
+Provides persistence operations for the `project` table.
+File: `shared/models/project.ts`
+
+## Records
+- ProjectRecord: `typeof project.$inferSelect`
+- NewProjectRecord: `typeof project.$inferInsert`
+
+## Methods
+- find(id, transaction?): Promise<ProjectRecord | null>
+- listByUser(userId, transaction?): Promise<ProjectRecord[]>
+- create(attributes, transaction?): Promise<ProjectRecord>
+- update(record, changes, transaction?): Promise<ProjectRecord | null>
+- softDelete(record, transaction?): Promise<ProjectRecord | null>
+
+## Scenarios
+
+### Scenario: Create a project record
+
+#### PreDB
+projects:
+id, user_id, name
+(empty)
+
+#### Steps
+* Call: ProjectModel.create({ userId: "1", name: "New Project" })
+* Returns: ProjectRecord with name "New Project"
+
+#### PostDB
+projects:
+id, user_id, name
+<uuid>, 1, New Project
+```
+
+---
+
+## 9. Policy Specification Format
+
+Policy specifications describe pure authorization decisions. Policies receive an
+authenticated actor and the records involved in an operation. They do not query
+or mutate the database and do not depend on transport or UI code.
+
+### Structure
+
+A Policy specification consists of:
+1. A heading naming the Policy
+2. The actor and record types it evaluates
+3. Its static decision methods
+4. Scenarios expressed as direct calls and returns
+
+### Scenario
+
+```markdown
+# ProjectPolicy
+
+Determines which project operations an actor may perform.
+
+## Methods
+- update(actor: Actor, records: readonly ProjectRecord[]): boolean
+- delete(actor: Actor, records: readonly ProjectRecord[]): boolean
+
+## Scenarios
+
+### Scenario: Owner may update a project
+
+#### Steps
+* Call: ProjectPolicy.update({ id: "user-1" }, [{ id: "project-1", userId: "user-1" }])
+* Returns: true
+
+### Scenario: Another user may not update a project
+
+#### Steps
+* Call: ProjectPolicy.update({ id: "user-2" }, [{ id: "project-1", userId: "user-1" }])
+* Returns: false
+```
+
+---
+
+## 10. Integration Specification Format
+
+Integration specifications describe Infrastructure adapters for third-party
+systems such as payments, email, storage, and AI APIs. Integrations own SDK and
+protocol mechanics, retries, and external error normalization. They do not own
+application authorization or business sequencing and are called by Services.
+
+### Structure
+
+An Integration specification consists of:
+1. A heading naming the Integration
+2. The external system and configuration it wraps
+3. Its public methods and serializable results
+4. Its external failure behavior
+5. Scenarios expressed as direct calls and outcomes
+
+### Scenario
+
+```markdown
+# EmailIntegration
+
+Provides the Infrastructure adapter for the configured email provider.
+
+## Methods
+- send(message: EmailMessage): Promise<EmailResult>
+
+## Scenarios
+
+### Scenario: Send an email successfully
+
+#### Steps
+* Call: EmailIntegration.send({ to: "user@example.com", subject: "Welcome" })
+* Returns: { success: true, messageId: "message-1" }
+
+### Scenario: Normalize a provider failure
+
+#### Steps
+* Call: EmailIntegration.send({ to: "invalid", subject: "Welcome" })
+* Throws: "Email provider rejected recipient"
+```
+
+---
+
+## 11. Component Specification Format
 
 Component specifications describe **UI components** in terms of their inputs, state, and structure.
 
@@ -712,7 +873,7 @@ A component specification consists of:
 - State entries use the format `name: type`
 - Absence of a section is meaningful
 
-### Example
+### Scenario
 
 ```markdown
 # CreateProjectForm
@@ -740,23 +901,27 @@ Renders the form used to create a new project.
 
 ---
 
-## 9. Hook Specification Format
+## 12. Behavior Hook Specification Format
 
-Hook specifications describe the **entry point of a behavior** - the bridge between UI components and server actions.
+Behavior hook specifications describe the **entry point of a behavior** — the bridge between UI components and its TanStack Query module.
 
 ### Purpose
 
 Hook specifications answer:
 - What behavior does this hook trigger?
-- What is the handler function signature?
+- What data does a read hook expose, or what is a mutation hook's handler signature?
 - What state does it manage?
 - What does it return to components?
 
 ### Key Principle
 
-**One behavior = One hook = One handler**
+**One behavior = One public hook = One TanStack Query primitive**
 
-Each behavior has exactly one hook that serves as its entry point. The hook exports a single handler function prefixed with `handle` (e.g., `handleCreateProject`, `handleDeleteTask`). This handler is the trigger that initiates the behavior.
+Each behavior has one public client module, `use-[behavior-name].hook.ts`, which
+exports its React hook. An initial page-read hook consumes `[page-name].query.ts`; an
+additional or on-demand read hook consumes its behavior `.query.ts`; a write hook
+consumes one `.mutation.ts`. Page-wide keys for authenticated user-owned data include
+the actor/user identity. Components import only the hook module.
 
 ### Structure
 
@@ -765,51 +930,63 @@ A hook specification consists of:
 2. A short description referencing the behavior
 3. **Parameters** it accepts (optional)
 4. **State** it manages internally
-5. **Returns** - always includes `handle[Behavior]`, `isLoading`, and `error`
-6. Optional **Dependencies** (other hooks it calls)
-7. **Scenarios** - test scenarios for the handler using `PreState`/`Steps`/`PostState` (state changes, not database)
+5. **Returns**, according to the TanStack Query primitive:
+   - Read hooks: `data`, `isLoading`, and `error`
+   - Mutation hooks: `handle[Behavior]`, `isLoading`, and `error`
+6. Its page- or behavior-owned query module, or its `.mutation.ts` dependency
+7. **Scenarios** — test scenarios using explicit TanStack Query cache
+   `PreState`/`Steps`/`PostState`, plus `PostDB` whenever persistence is observable
 
-### Example
+Read hooks do not expose a mutation handler. Mutation hooks do not expose query
+data as their public state; authoritative server data remains in the query cache
+and is consumed through a read hook.
+
+### Scenario (Mutation Hook)
 
 ```markdown
-# useCreateProject()
+# use-create-project.hook.ts — useCreateProject()
 
-Entry point for the Create Project behavior. Validates input, performs optimistic updates, and calls the server action.
+Public entry point for the Create Project behavior. It invokes one mutation module that performs the cache transition and calls the server action.
 
 ## State
 - isLoading: boolean
 - error: string | null
 
 ## Returns
-- handleCreateProject: (name: string) => Promise<void> - triggers the behavior
+- handleCreateProject: (name: string) => Promise<ProjectRecord> - triggers the behavior
 - isLoading: boolean - submission in progress
 - error: string | null - current error message
 
 ## Dependencies
-- useSetAtom(projectsAtom) - for optimistic updates
+- `create-project.mutation.ts` — mutation options and optimistic cache transition
 
 ## Scenarios
 
 ### Scenario: Create project successfully
 
 #### PreState
-projectsAtom: []
+query `['projects', 'user-1', 'list']`: []
 isLoading: false
 error: null
 
 #### Steps
 * Call: handleCreateProject("New Project")
-* Returns: void
+* Returns: ProjectRecord named "New Project"
 
 #### PostState
-projectsAtom: [{ id: 1, name: "New Project", status: "draft", pending: false }]
+query `['projects', 'user-1', 'list']`: [{ id: 1, name: "New Project", status: "draft", pending: false }]
 isLoading: false
 error: null
+
+#### PostDB
+projects:
+id, user_id, name, status
+<uuid>, user-1, New Project, draft
 
 ### Scenario: Reject empty name
 
 #### PreState
-projectsAtom: []
+query `['projects', 'user-1', 'list']`: []
 isLoading: false
 error: null
 
@@ -818,16 +995,25 @@ error: null
 * Throws: "Name is required"
 
 #### PostState
-projectsAtom: []
+query `['projects', 'user-1', 'list']`: []
 isLoading: false
 error: "Name is required"
+
+#### PostDB
+projects:
+id, user_id, name, status
+(empty)
 ```
 
 ---
 
-## 10. Route Specification Format
+## 13. Route Specification Format
 
-Route specifications describe **HTTP endpoints** for behaviors that need HTTP semantics, streaming, or external access. They are the HTTP counterpart to Server Actions.
+Route specifications describe **HTTP Controller endpoints** for behaviors that
+need HTTP semantics, streaming, or external access. They are the HTTP counterpart
+to Server Actions. A Route authenticates or verifies its transport boundary,
+adapts the request, calls exactly one Service, and translates the response; it
+does not call Models, Drizzle, or Integrations directly.
 
 ### Purpose
 
@@ -852,13 +1038,13 @@ A route specification consists of:
 
 Routes are consumed by hooks via `fetch` (non-streaming) or `fetchEventSource` (streaming).
 
-### Non-Streaming Route Example
+### Non-Streaming Route Scenario
 
 ```markdown
 # Process Data Route
 
 **Method:** POST
-**Path:** /projects/behaviors/process-data
+**Path:** /projects/behaviors/process-data/routes
 
 ## Description
 
@@ -896,7 +1082,7 @@ fileId: ""
 { success: false, error: "File ID is required" }
 ```
 
-### Streaming Route Example
+### Streaming Route Scenario
 
 For streaming routes, use `Emit:` to describe events sent over the stream:
 
@@ -904,7 +1090,7 @@ For streaming routes, use `Emit:` to describe events sent over the stream:
 # Generate Specification Route
 
 **Method:** POST
-**Path:** /projects/behaviors/generate-spec
+**Path:** /projects/behaviors/generate-spec/routes
 
 ## Description
 
@@ -951,7 +1137,7 @@ prompt: ""
 
 ---
 
-## 11. Workflow Specification Format
+## 14. Workflow Specification Format
 
 Workflow specifications describe **durable, multi-step background processes** that survive failures and can resume from checkpoints. They are implementation-agnostic and can be realized using systems like Inngest, Trigger.dev, or useworkflow.
 
@@ -990,7 +1176,7 @@ Each step represents a durable checkpoint. If the workflow fails after a step co
 - What it persists (the checkpoint data)
 - Optional retry policy if non-default
 
-### Example
+### Scenario
 
 ```markdown
 # Process Order Workflow
@@ -1088,9 +1274,13 @@ id, status, total
 - Behavior and Automation are the leaves of the Functional hierarchy
 - Functional specs describe _what_, Technical specs describe _how_
 - Functional specs are hierarchical (Project → Flow → Page → Behavior; Project → Automation)
-- Technical specs are a flat catalog (Function, Class, Component, Hook, Route, Workflow)
-- Thin Client, Fat Server: the client triggers intent, the server realizes it
+- Technical specs are a flat catalog (Function, Service, Policy, Model,
+  Integration, Component, Hook, Route, Workflow)
+- Thin Presentation: the client triggers intent; Controllers adapt transport,
+  Services realize business behavior, and Infrastructure performs external effects
 - A behavior may have at most one Action, one Route, and one Workflow — each serves a distinct purpose
+- Model, Service, Action, and Hook persistence tests use real in-memory SQLite;
+  only authentication/framework and external-system boundaries are replaced
 - State ownership is always explicit
 - Omitted sections are meaningful
 - Formats are minimal and consistent
