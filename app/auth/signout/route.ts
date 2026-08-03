@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { safeRedirectPath } from "@/lib/auth/redirect";
 import { headers } from "next/headers";
 import { NextRequest } from "next/server";
 
@@ -10,7 +11,10 @@ import { NextRequest } from "next/server";
  * before navigating to the magic link.
  */
 export async function GET(request: NextRequest) {
-  const redirect = request.nextUrl.searchParams.get("redirect") || "/";
+  const redirect = safeRedirectPath(
+    request.nextUrl.searchParams.get("redirect"),
+    "/",
+  );
 
   try {
     await auth.api.signOut({

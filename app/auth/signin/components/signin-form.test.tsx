@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const formAction = vi.fn();
-vi.mock("../behaviors/signin/use-signin", () => ({
+vi.mock("../behaviors/signin/use-signin.hook", () => ({
   useSignIn: () => ({
     state: { error: null },
     formAction,
@@ -23,7 +23,9 @@ describe("signin form scenarios", () => {
       target: { value: "securePassword123" },
     });
 
-    fireEvent.submit(screen.getByRole("button", { name: "SIGN IN" }).closest("form")!);
+    fireEvent.submit(
+      screen.getByRole("button", { name: "SIGN IN" }).closest("form")!,
+    );
 
     expect(formAction).toHaveBeenCalledOnce();
     const submitted = formAction.mock.calls[0][0] as FormData;

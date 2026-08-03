@@ -27,7 +27,7 @@ export function AuthHeader() {
           {isSignIn && (
             <div className="flex items-center gap-3">
               <span className="text-sm text-muted-foreground">
-                Don't have an account?
+                Don&apos;t have an account?
               </span>
               <Link
                 href={`/auth/signup${redirectQuery}`}

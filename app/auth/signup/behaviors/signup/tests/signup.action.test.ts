@@ -6,12 +6,13 @@ vi.mock("@/lib/auth", async () => {
   return { ...actual, getUser: vi.fn() };
 });
 
+import { HOME_URL } from "@/app.config";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { PostDB, PreDB } from "@/lib/db-test";
 import { getUser } from "@/lib/auth";
+import { PostDB, PreDB } from "@/lib/db-test";
 import { redirect } from "next/navigation";
-import { signup } from "./signup.action";
+import { signup } from "../signup.action";
 
 function signupForm(email: string, password = "securePassword123") {
   const form = new FormData();
@@ -25,15 +26,32 @@ describe("signup action scenarios", () => {
   beforeEach(async () => {
     await PreDB(db, schema, { user: [], account: [], session: [] });
     vi.mocked(getUser).mockResolvedValue({ user: null } as never);
+    vi.mocked(redirect).mockReset();
   });
 
   it("creates the account and redirects", async () => {
     const email = "new-user@example.com";
 
-    const result = await signup({ error: null }, signupForm(email), "/");
+    const result = await signup({ error: null }, signupForm(email), "/projects");
 
     expect(result).toBeUndefined();
-    expect(redirect).toHaveBeenCalledWith("/");
+    expect(redirect).toHaveBeenCalledWith("/projects");
+    await PostDB(db, schema, {
+      user: [{ email, emailVerified: false }],
+      account: [{ providerId: "credential" }],
+    });
+  });
+
+  it("uses the home fallback for an external redirect", async () => {
+    const email = "safe-redirect@example.com";
+
+    await signup(
+      { error: null },
+      signupForm(email),
+      "https://evil.example/steal-session",
+    );
+
+    expect(redirect).toHaveBeenCalledWith(HOME_URL);
     await PostDB(db, schema, {
       user: [{ email, emailVerified: false }],
       account: [{ providerId: "credential" }],

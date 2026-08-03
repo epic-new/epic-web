@@ -11,9 +11,9 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { PostDB, PreDB } from "@/lib/db-test";
-import { createTestClient, queryWrapper } from '@/shared/tests/test-utils';
+import { createTestClient, queryWrapper } from "@/shared/tests/test-utils";
 import { eq } from "drizzle-orm";
-import { useSignIn } from "./use-signin";
+import { useSignIn } from "../use-signin.hook";
 
 describe("signin behavior scenarios", () => {
   const email = "hook-user@example.com";

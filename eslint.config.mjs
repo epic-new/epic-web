@@ -8,6 +8,12 @@ const adminTestFiles = [
   "app/admin/**/*.spec.*",
 ];
 
+const authTestFiles = [
+  "app/auth/**/tests/**",
+  "app/auth/**/*.test.*",
+  "app/auth/**/*.spec.*",
+];
+
 const databaseImports = [
   "@/db",
   "@/db/**",
@@ -153,6 +159,70 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    name: "auth/presentation-boundaries",
+    files: [
+      "app/auth/**/*.tsx",
+      "app/auth/**/*.hook.ts",
+      "app/auth/**/use-*.ts",
+      "app/auth/**/*.query.ts",
+      "app/auth/**/*.mutation.ts",
+      "app/auth/**/state.ts",
+    ],
+    ignores: [
+      ...authTestFiles,
+      "app/auth/**/*.action.*",
+      "app/auth/**/actions/**",
+      "app/auth/**/route.ts",
+      "app/auth/**/*-action.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: presentationRestrictedImports,
+        },
+      ],
+    },
+  },
+  {
+    name: "auth/component-boundaries",
+    files: ["app/auth/**/*.tsx", "app/auth/**/components/**/*.ts"],
+    ignores: [
+      ...authTestFiles,
+      "app/auth/**/*.action.*",
+      "app/auth/**/actions/**",
+      "app/auth/**/route.ts",
+      "app/auth/**/*-action.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "jotai",
+              message:
+                "Auth components consume state and handlers through public Hooks; do not import Jotai directly.",
+            },
+          ],
+          patterns: [
+            ...presentationRestrictedImports,
+            {
+              group: ["jotai/**"],
+              message:
+                "Auth components consume state and handlers through public Hooks; do not import Jotai directly.",
+            },
+            {
+              group: actionImports,
+              message:
+                "Auth components must call public Hooks instead of importing behavior Actions directly.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     name: "admin/controller-boundaries",
     files: [
       "app/admin/**/*.action.ts",
@@ -208,6 +278,76 @@ const eslintConfig = defineConfig([
               group: integrationImports,
               message:
                 "Actions cannot import Integrations; call the behavior Service instead.",
+            },
+            {
+              group: [
+                "react/**",
+                "react-dom/**",
+                "@tanstack/react-query/**",
+                "jotai/**",
+                "@/lib/auth/client",
+              ],
+              message:
+                "Controllers cannot import Presentation or client authentication modules.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: "authentication/controller-boundaries",
+    files: [
+      "app/auth/**/*.action.ts",
+      "app/auth/**/actions/**/*.ts",
+      "app/auth/**/action-*.ts",
+      "app/auth/**/*-action.ts",
+      "app/auth/**/route.ts",
+      "shared/actions/**/*.action.ts",
+    ],
+    ignores: authTestFiles,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "react",
+              message: "Controllers cannot depend on React.",
+            },
+            {
+              name: "react-dom",
+              message: "Controllers cannot depend on React.",
+            },
+            {
+              name: "@tanstack/react-query",
+              message: "TanStack Query belongs to Presentation, not Controllers.",
+            },
+            {
+              name: "jotai",
+              message: "Jotai belongs to Presentation, not Controllers.",
+            },
+          ],
+          patterns: [
+            {
+              group: databaseImports,
+              message:
+                "Authentication Controllers may use @/lib/auth directly, but cannot access application persistence.",
+            },
+            {
+              group: modelImports,
+              message:
+                "Authentication Controllers cannot import Models; introduce a Service when application records are involved.",
+            },
+            {
+              group: policyImports,
+              message:
+                "Authentication Controllers cannot authorize application records through Policies; introduce a Service.",
+            },
+            {
+              group: integrationImports,
+              message:
+                "Authentication Controllers may use only the narrow @/lib/auth boundary, not general Integrations.",
             },
             {
               group: [

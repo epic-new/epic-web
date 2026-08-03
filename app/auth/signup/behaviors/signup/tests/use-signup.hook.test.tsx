@@ -12,10 +12,10 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { getUser } from "@/lib/auth";
 import { PostDB, PreDB } from "@/lib/db-test";
-import { createTestClient, queryWrapper } from '@/shared/tests/test-utils';
-import { useSignup } from "./use-signup";
+import { createTestClient, queryWrapper } from "@/shared/tests/test-utils";
+import { useSignup } from "../use-signup.hook";
 
-describe("signup behavior scenarios", () => {
+describe("signup hook scenarios", () => {
   beforeEach(async () => {
     await PreDB(db, schema, { user: [], account: [], session: [] });
     vi.mocked(getUser).mockResolvedValue({ user: null } as never);

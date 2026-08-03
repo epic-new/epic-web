@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const formAction = vi.fn();
-vi.mock("../behaviors/signup/use-signup", () => ({
+vi.mock("../behaviors/signup/use-signup.hook", () => ({
   useSignup: () => ({
     state: { error: null },
     formAction,

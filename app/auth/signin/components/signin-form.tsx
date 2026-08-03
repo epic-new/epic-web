@@ -1,6 +1,6 @@
 "use client";
 
-import { useSignIn } from "../behaviors/signin/use-signin";
+import { useSignIn } from "../behaviors/signin/use-signin.hook";
 
 const LockIcon = () => (
   <svg

@@ -1,6 +1,6 @@
 "use client";
 
-import { useSignup } from "../behaviors/signup/use-signup";
+import { useSignup } from "../behaviors/signup/use-signup.hook";
 import { signOutAction } from "./signout-action";
 import { useTransition } from "react";
 

@@ -5,13 +5,14 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 
+import { HOME_URL } from "@/app.config";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
-import { PostDB, PreDB } from "@/lib/db-test";
 import { auth } from "@/lib/auth";
+import { PostDB, PreDB } from "@/lib/db-test";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { signIn } from "./signin.action";
+import { signIn } from "../signin.action";
 
 function signinForm(email: string, password: string) {
   const form = new FormData();
@@ -41,6 +42,20 @@ describe("signin action scenarios", () => {
     await signIn({ error: null }, signinForm(email, password), "/");
 
     expect(redirect).toHaveBeenCalledWith("/");
+    await PostDB(db, schema, {
+      user: [{ email }],
+      session: [{ userId }],
+    });
+  });
+
+  it("uses the home page when the requested redirect is external", async () => {
+    await signIn(
+      { error: null },
+      signinForm(email, password),
+      "https://example.com/phishing",
+    );
+
+    expect(redirect).toHaveBeenCalledWith(HOME_URL);
     await PostDB(db, schema, {
       user: [{ email }],
       session: [{ userId }],

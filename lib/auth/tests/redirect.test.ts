@@ -1,0 +1,21 @@
+import { describe, expect, it } from "vitest";
+
+import { safeRedirectPath } from "../redirect";
+
+describe("safeRedirectPath", () => {
+  it("preserves internal paths with query strings and fragments", () => {
+    expect(safeRedirectPath("/projects?page=2#active", "/")).toBe(
+      "/projects?page=2#active",
+    );
+  });
+
+  it.each([
+    "https://example.com",
+    "//example.com",
+    "/\\example.com",
+    "/%5Cexample.com",
+    "/%2F%2Fexample.com",
+  ])("replaces unsafe redirect %s with the fallback", (value) => {
+    expect(safeRedirectPath(value, "/auth/signin")).toBe("/auth/signin");
+  });
+});

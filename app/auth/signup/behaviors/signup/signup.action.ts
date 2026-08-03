@@ -1,11 +1,11 @@
 "use server";
 
-import { auth } from "@/lib/auth";
-import { z } from "zod";
-import { redirect } from "next/navigation";
-import { authErrorHandler, throwAuthError } from "@/lib/auth/error";
 import { HOME_URL } from "@/app.config";
-import { getUser } from "@/lib/auth";
+import { auth, getUser } from "@/lib/auth";
+import { authErrorHandler, throwAuthError } from "@/lib/auth/error";
+import { safeRedirectPath } from "@/lib/auth/redirect";
+import { redirect } from "next/navigation";
+import { z } from "zod";
 
 export interface ActionResult {
   error: string | null;
@@ -28,9 +28,8 @@ const signupSchema = z
 export async function signup(
   _prevState: ActionResult,
   formData: FormData,
-  redirectURL: string
+  redirectURL: string,
 ): Promise<ActionResult> {
-  // Verificar se o usuário já está logado
   const { user } = await getUser();
   if (user) {
     return { error: "You are already logged in. Please sign out first." };
@@ -45,8 +44,7 @@ export async function signup(
   const parsed = signupSchema.safeParse(raw);
 
   if (!parsed.success) {
-    const firstError = parsed.error.issues[0];
-    const errorCode = firstError.message;
+    const errorCode = parsed.error.issues[0].message;
 
     if (errorCode === "INVALID_EMAIL") {
       return { error: throwAuthError("invalidEmail").message };
@@ -70,23 +68,16 @@ export async function signup(
       body: {
         email,
         password,
-        name: "", // Better Auth requires name field
+        name: "",
       },
     })
-    .catch((err) => {
-      const handled = authErrorHandler(err);
-      return { error: handled.message };
-    });
+    .catch((error) => ({ error: authErrorHandler(error).message }));
 
-  if ("error" in result) {
-    return result;
-  }
+  if ("error" in result) return result;
 
   if (!result || (!result.user && !result.token)) {
-    return {
-      error: throwAuthError("internalServerError").message,
-    };
+    return { error: throwAuthError("internalServerError").message };
   }
 
-  redirect(redirectURL || HOME_URL);
+  redirect(safeRedirectPath(redirectURL, HOME_URL));
 }

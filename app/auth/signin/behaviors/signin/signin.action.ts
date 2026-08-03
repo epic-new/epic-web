@@ -1,11 +1,12 @@
 "use server";
 
-import { auth } from "@/lib/auth";
-import { z } from "zod";
-import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { authErrorHandler, throwAuthError } from "@/lib/auth/error";
 import { HOME_URL } from "@/app.config";
+import { auth } from "@/lib/auth";
+import { authErrorHandler, throwAuthError } from "@/lib/auth/error";
+import { safeRedirectPath } from "@/lib/auth/redirect";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { z } from "zod";
 
 interface ActionResult {
   error: string | null;
@@ -19,7 +20,7 @@ const signInSchema = z.object({
 export async function signIn(
   _prevState: ActionResult,
   formData: FormData,
-  redirectURL: string
+  redirectURL: string,
 ): Promise<ActionResult> {
   const raw = {
     email: formData.get("email"),
@@ -58,5 +59,5 @@ export async function signIn(
     return { error: handled.message };
   }
 
-  redirect(redirectURL || HOME_URL);
+  redirect(safeRedirectPath(redirectURL, HOME_URL));
 }

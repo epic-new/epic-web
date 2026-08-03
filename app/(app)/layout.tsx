@@ -1,7 +1,7 @@
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getUser } from "@/lib/auth";
-import { signOut as signOutAction } from "@/shared/behaviors/signout/actions/signout";
+import { signOut as signOutAction } from "@/shared/actions/sign-out.action";
 import { redirect } from "next/navigation";
 import { SIGNIN_URL } from "@/app.config";
 import { ImpersonationBanner } from "@/app/admin/components/impersonation-banner";
