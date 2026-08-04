@@ -150,7 +150,7 @@ await PostDB(db, schema, { users: [{ name: 'Alice' }] });
 
 ## Epic CLI
 
-When the user is planning a project, creating/managing issues, or building/reviewing issues with the `epic` command, use the **epic-cli** skill at `.agents/skills/epic-cli/SKILL.md`. This includes requests like "create a project", "generate a PRD", "break a PRD into issues", "plan an issue", "build an issue", or "review/merge an issue".
+When the user is planning a project, creating/managing issues, or building/reviewing issues with the `epic` command, use the **epic** skill at `.agents/skills/epic/SKILL.md`. This includes requests like "create a project", "generate a PRD", "break a PRD into issues", "plan an issue", "build an issue", or "review/merge an issue".
 
 PRD and issue content lives in the Epic database. Do not look for, create, or
 maintain tracked `.epic/prds/*.md` or `.epic/issues/*.md` files, and do not use

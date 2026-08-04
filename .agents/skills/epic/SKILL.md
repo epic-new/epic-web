@@ -1,5 +1,5 @@
 ---
-name: epic-cli
+name: epic
 description: Drive the Epic CLI (`epic`) — projects, PRDs, issues, and the agent build lifecycle (plan → execute → verify → fix → review → merge). Issue and PRD content lives in the Epic database and is reached through this CLI, never through files. Use when the user asks to create a project, write or break a PRD, create/plan/build/review/merge an issue, read what an issue or PRD says, run a preview or worktree for one, or set up the machine to build at all. Also covers the marketplace side — publishing an issue as a request, proposals, funded contracts, and Stripe payouts. Triggers on "create a project", "generate a PRD", "break the PRD into issues", "plan this issue", "build this issue", "what does issue X say", "open the PR for this issue", "link this repo to a project", "why won't my build start", "connect Claude", "set up the agent credential", "post this issue to the marketplace", "accept this proposal", "approve the contract", "set up payouts".
 ---
 
